@@ -38,7 +38,8 @@ def generate_frames():
         success,frame = camera.read()
         if not success:
             break
-        
+        global currentCamera
+        currentCamera = frame
         frame = imutils.resize(frame, width=600)
         frame = cv2.flip(frame, 1)
 
@@ -96,113 +97,130 @@ def diemdanh(code):
     print("---Load List Student: %s seconds ---" % (time.time() - start1))
 
     # Nhận dạng
-    start2 = time.time()
     global modelDetector 
     global modelFacenet
     global modelLabelEncoder
     global modelSVC
-    print("---Load Global model: %s seconds ---" % (time.time() - start2))
+    global currentCamera
 
-    required_size=(160, 160)
-
-    start3 = time.time()
-    realPath = os.path.dirname(__file__)
-    img = cv2.imread(os.path.join(realPath,"camera.jpg"))
-    img = cv2.flip(img, 1)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    print("---Read Image: %s seconds ---" % (time.time() - start3))
+    # Lặt hình lại cho đúng chiều
+    img = cv2.flip(currentCamera, 1)
+    # Thực hiện detect ảnh
     start4 = time.time()
-    bounding_box, probs = modelDetector.detect(img)
+    msg, face_array = detect_face.dectect(modelDetector, img)
     print("---Detect Face: %s seconds ---" % (time.time() - start4))
+    
+    if msg == '':
+        start6 = time.time()
+        # Thực hiện chuyển đổi mảng pixel thành mảng các vector
+        embedding = training.get_embedding(modelFacenet, face_array)
+        print("---Embedding: %s seconds ---" % (time.time() - start6))
 
-    if bounding_box is not None:
-        faces_found = bounding_box.shape[0]
+        #Predict
+        start7 = time.time()
+        # Sử dụng model SVC để dự đoán
+        samples = expand_dims(embedding, axis=0)
+        yhat_class = modelSVC.predict(samples)
+        yhat_prob = modelSVC.predict_proba(samples)
+        print("---Predict: %s seconds ---" % (time.time() - start7))
 
-        if faces_found == 1:
-            box = bounding_box[0]
-            face = img[int(box[1]): int(box[3]),int(box[0]): int(box[2])]
-            
-            start5 = time.time()
-            image = Image.fromarray(face)
-            image = image.resize(required_size)
-            face_array = asarray(image)
-            print("---Convert Pixel: %s seconds ---" % (time.time() - start5))
+        # Thực hiện lấy tên và phần trăm chính xác sau khi dự đoán
+        class_index = yhat_class[0]
+        class_probability = yhat_prob[0,class_index] * 100
+        predict_names = modelLabelEncoder.inverse_transform(yhat_class)
+        print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
-            start6 = time.time()
-            embedding = training.get_embedding(modelFacenet, face_array)
-            print("---Embedding: %s seconds ---" % (time.time() - start6))
-
-            #Predict
-            start7 = time.time()
-            samples = expand_dims(embedding, axis=0)
-            yhat_class = modelSVC.predict(samples)
-            yhat_prob = modelSVC.predict_proba(samples)
-            print("---Predict: %s seconds ---" % (time.time() - start7))
-
-            # get name
-            class_index = yhat_class[0]
-            class_probability = yhat_prob[0,class_index] * 100
-            predict_names = modelLabelEncoder.inverse_transform(yhat_class)
-            print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
-
-            if (class_probability > 50.0):
-                currentStudent = next((s for s in students if s['mssv'] == predict_names[0]),None)
-                if (currentStudent != None):
-                    result = {
-                        "success": True,
-                        "msg": "",
-                        "data": currentStudent
-                    }
-                else:
-                    result = {
-                        "success": False,
-                        "msg": "Không tìm thấy sinh viên trong lớp "+ code
-                    }
-            else:    
+        # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
+        if (class_probability > 50.0):
+            # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
+            currentStudent = next((s for s in students if s['mssv'] == predict_names[0]),None)
+            if (currentStudent != None):
+                result = {
+                    "success": True,
+                    "msg": "",
+                    "data": currentStudent
+                }
+            else:
                 result = {
                     "success": False,
-                    "msg": "Không tìm thấy sinh viên trong lớp " + code
+                    "msg": "Không tìm thấy sinh viên trong lớp "+ code
                 }
-        else:
+        # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
+        else:    
             result = {
                 "success": False,
-                "msg": "Có nhiều hơn 1 khuôn mặt trên camera"
+                "msg": "Không tìm thấy sinh viên này trong cơ sở dữ liệu hoặc chất lượng hình ảnh kém"
             }
     else:
         result = {
             "success": False,
-            "msg": "Không tìm thấy khuôn mặt trên camera"
+            "msg": msg
         }
 
     return result
 
+def retrainModel():
+    ErrorMsg = ''
+    # Thực hiện detect ảnh
+    realPath = os.path.dirname(__file__)
+    source_dir = os.path.join(realPath, 'OriginalFace')
+    dest_dir = os.path.join(realPath, 'DetectFace') 
+    detect_face.detectData(modelDetector,source_dir,dest_dir)
+    # Bắt đầu Embedding dữ liệu ảnh mới
+    global modelFacenet
+    training.mainTraining(modelFacenet)
+    # Fit lại model vừa mới train
+    global modelSVC
+    modelSVC = load_modelSVC()
+
+    return ErrorMsg
+
+@app.route("/themsinhvien")
+def themsinhvien():
+    result = 'thanh cong'
+    ErrorMsg = retrainModel()
+    return result
+
 def load_modelSVC():
-    data = load('Model/faces-dataset.npz')
+    model = SVC(kernel='linear', probability=True)
+    modelPath = os.path.join(os.path.dirname(__file__),'Model/faces-dataset.npz')
+    if os.path.exists(modelPath):
+        data = load('Model/faces-dataset.npz')
 
-    trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
+        trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
-    in_encoder = Normalizer(norm='l2')
-    trainX = in_encoder.transform(trainX)
-    testX = in_encoder.transform(testX)
+        in_encoder = Normalizer(norm='l2')
+        trainX = in_encoder.transform(trainX)
+        testX = in_encoder.transform(testX)
 
-    global modelLabelEncoder
+        global modelLabelEncoder
     
-    modelLabelEncoder.fit(trainy)
-    trainy = modelLabelEncoder.transform(trainy)
-    testy = modelLabelEncoder.transform(testy)
+        modelLabelEncoder.fit(trainy)
+        trainy = modelLabelEncoder.transform(trainy)
+        testy = modelLabelEncoder.transform(testy)
 
-    modelCache = SVC(kernel='linear', probability=True)
-    modelCache.fit(trainX, trainy)
+        model.fit(trainX, trainy)
 
-    return modelCache
+    return model
 
+def load_modelFaceNet():
+    model = FaceNet()
+    realPath = os.path.dirname(__file__)
+    img = cv2.imread(os.path.join(realPath,"camera.jpg"))
+    face_pixels = asarray(img)
+    face_pixels = face_pixels.astype('float32')
+    samples = expand_dims(face_pixels, axis=0)
+    yhat = model.embeddings(samples)
+    return model
+
+def load_AllModel():
+    mDectector = MTCNN(margin=20, select_largest=False)
+    mSVC = load_modelSVC()
+    mFacenet = load_modelFaceNet()
+    return mDectector, mFacenet, mSVC
 
 if __name__ == "__main__":
-
-    modelDetector = MTCNN()
-    
-    modelFacenet = FaceNet()
+    currentCamera = []
     modelLabelEncoder = LabelEncoder()
-    modelSVC = load_modelSVC()
-    
+    modelDetector, modelFacenet, modelSVC = load_AllModel()
     app.run(debug=True)
