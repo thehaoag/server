@@ -59,16 +59,16 @@ def loadListStudent_Code(code):
     students = []
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT s.MSSV, s.Name FROM Mapping m join Class c on c.ID = m.ClassID join Students s on s.ID = m.StudentID WHERE c.Code = ?",code)
+    cursor.execute("SELECT s.MSSV, s.Name, m.Present, m.Absence, m.Status FROM Mapping m join Class c on c.ID = m.ClassID join Students s on s.ID = m.StudentID WHERE c.Code = ?",code)
     for row in cursor.fetchall():
-        students.append({"mssv": row[0], "name": row[1]})
+        students.append({"mssv": row[0], "name": row[1], "present": row[2], "absence": row[3], "status": row[4]})
     conn.close()
 
     return students
 
 @app.route("/getListStudents/<string:code>")
 def getListStudents(code):
-    
+
     students = loadListStudent_Code(code)
 
     count = len(students)
