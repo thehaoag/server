@@ -1,4 +1,4 @@
-from flask import Flask,render_template,Response
+from flask import Flask, render_template, Response, request, jsonify
 import cv2
 import pyodbc
 import detect_face
@@ -12,11 +12,48 @@ from numpy import load
 from sklearn.svm import SVC
 from sklearn.preprocessing import Normalizer
 from sklearn.preprocessing import LabelEncoder
-from PIL import Image
 import time
 import os
+from datetime import datetime, timedelta, timezone
+from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 
 app = Flask(__name__)
+
+app.config["JWT_SECRET_KEY"] = "SECRET_KEY_PROJECT_ATTENDED_SYSTEM"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+jwt = JWTManager(app)
+
+@app.route('/login', methods=["POST"])
+def login():
+    accounts = []
+    user = request.json.get("user", None)
+    password = request.json.get("password", None)
+
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ID, Name, Email, Role FROM Account WHERE Username = ? and Password = ?",user, password)
+    
+    for row in cursor.fetchall():
+        accounts.append({"id": row[0], "name": row[1], "email": row[2], "role": row[3]})
+
+    conn.close()
+    
+    if accounts != [] and len(accounts) > 0:
+        account = accounts[0]
+        access_token = create_access_token(identity=user)
+        response = {"success": True,"access_token":access_token, "account": account}
+    
+    else:
+        response = {"success": False,"msg": "Wrong user or password"}
+
+    return response 
+    
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    response = jsonify({"msg": "logout successful"})
+    unset_jwt_cookies(response)
+    return response
 
 def connection():
     s = 'DESKTOP-1H1ENH8\SQLEXPRESS' #Your server name 
