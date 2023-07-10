@@ -92,30 +92,69 @@ def generate_frames():
 def video():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-def loadListStudent_Code(code):
+def loadListStudent(year,semester,maMH,group):
     students = []
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT s.MSSV, s.Name, m.Present, m.Absence, m.Status FROM Mapping m join Class c on c.ID = m.ClassID join Students s on s.ID = m.StudentID WHERE c.Code = ?",code)
+    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
     for row in cursor.fetchall():
-        students.append({"mssv": row[0], "name": row[1], "present": row[2], "absence": row[3], "status": row[4]})
+        students.append({"mssv": row[0], "name": row[1], "session1": row[2], "session2": row[3], "session3": row[4],"session4": row[4],
+        "session5": row[2], "session6": row[3], "session7": row[4],"session8": row[2], "session9": row[3], "session10": row[4],
+        "session11": row[4], "session12": row[4], "session13": row[4], "session14": row[4], "session15": row[4]})
     conn.close()
 
     return students
 
-@app.route("/getListStudents/<string:code>")
-def getListStudents(code):
+def loadListStudent_Attend(year,semester,maMH,group,session):
+    students = []
+    classID = 0
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
+    for row in cursor.fetchall():
+        classID = row[0]
+        students.append({"mssv": row[1], "name": row[2], "datesession": row[session+2]})
+    conn.close()
 
-    students = loadListStudent_Code(code)
+    return students, classID
 
-    count = len(students)
-    #paging = [students[i:i+per_page] for i in range(0, len(students), per_page)]
+@app.route("/getListStudents_Attend", methods=["POST"])
+def getListStudents_Attend():
+    year = request.json.get("year", None)
+    semester = request.json.get("semester", None)
+    maMH = request.json.get("maMH", None)
+    group = request.json.get("group", None)
+    session = request.json.get("session", None)
 
-    if students != [] and count > 0:
+    students, classID = loadListStudent_Attend(year,semester,maMH,group,session)
+    print(students)
+    if students != [] and len(students) > 0:
+        result = {
+            "success": True,
+            "currentCode": classID,
+            "listStudents": students
+        }
+    else:
+        result = {
+            "success": False,
+            "msg": "Không tìm thấy lớp học này"
+        }
+
+    return result
+
+@app.route("/getListStudents", methods=["POST"])
+def getListStudents():
+    year = request.json.get("year", None)
+    semester = request.json.get("semester", None)
+    maMH = request.json.get("maMH", None)
+    group = request.json.get("group", None)
+
+    students = loadListStudent(year,semester,maMH,group)
+
+    if students != [] and len(students) > 0:
         result = {
             "success": True,
             "currentCode": code,
-            "total": count,
             "listStudents": students
         }
     else:
@@ -126,7 +165,19 @@ def getListStudents(code):
 
     return result
 
-@app.route("/diemdanh/<string:code>")
+def loadListStudent_Code(code):
+    students = []
+
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("Select StudentID from Attended where ClassID = ?", code)
+    for row in cursor.fetchall():
+        students.append(row[0])
+    conn.close()
+
+    return students
+
+@app.route("/diemdanh/<int:code>")
 def diemdanh(code):
 
     start1 = time.time()
@@ -170,17 +221,16 @@ def diemdanh(code):
         # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
         if (class_probability > 50.0):
             # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
-            currentStudent = next((s for s in students if s['mssv'] == predict_names[0]),None)
-            if (currentStudent != None):
+            studentID = next((s for s in students if s == predict_names[0]),None)
+            if (studentID != None):
                 result = {
                     "success": True,
-                    "msg": "",
-                    "data": currentStudent
+                    "data": studentID
                 }
             else:
                 result = {
                     "success": False,
-                    "msg": "Không tìm thấy sinh viên trong lớp "+ code
+                    "msg": "Không tìm thấy sinh viên trong lớp."
                 }
         # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
         else:    
