@@ -56,7 +56,7 @@ def logout():
     return response
 
 def connection():
-    s = 'DESKTOP-1H1ENH8\SQLEXPRESS' #Your server name 
+    s = '.' #Your server name 
     d = 'DoAn' 
     u = '' #Your login
     p = '' #Your login password
@@ -113,7 +113,10 @@ def loadListStudent_Attend(year,semester,maMH,group,session):
     cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
     for row in cursor.fetchall():
         classID = row[0]
-        students.append({"mssv": row[1], "name": row[2], "datesession": row[session+2]})
+        date = row[session+2]
+        if (date):
+            date = row[session+2].strftime("%d/%m/%Y")
+        students.append({"mssv": row[1], "name": row[2], "datesession": date, "session": session})
     conn.close()
 
     return students, classID
@@ -127,7 +130,7 @@ def getListStudents_Attend():
     session = request.json.get("session", None)
 
     students, classID = loadListStudent_Attend(year,semester,maMH,group,session)
-    print(students)
+    
     if students != [] and len(students) > 0:
         result = {
             "success": True,
@@ -243,6 +246,31 @@ def diemdanh(code):
             "success": False,
             "msg": msg
         }
+
+    return result
+
+def updateAttened(classID, listStudents):
+    conn = connection()
+    cursor = conn.cursor()
+    for student in listStudents:
+        sqlUpdate = "UPDATE Attended SET Buoi" + str(student.get('session')) +" = ? Where ClassID = ? and StudentID = ?"
+        cursor.execute(sqlUpdate, student.get('datesession'), classID, student.get('mssv'))
+    
+    conn.commit()
+    conn.close()
+    return
+
+@app.route("/submitAttended", methods=["POST"])
+def submitAttended():
+    classID = request.json.get("classID", None)
+    listStudents = request.json.get("listStudents", None)
+
+    updateAttened(classID, listStudents)
+
+    result = {
+        "success": True,
+        "msg": "Submit Attended Successful!"
+    }
 
     return result
 
