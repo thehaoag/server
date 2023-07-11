@@ -274,6 +274,30 @@ def submitAttended():
 
     return result
 
+@app.route("/importCourse", methods=["POST"])
+def importCourse():
+    #year = request.json.get("year", None)
+    #semester = request.json.get("semester", None)
+    #file = request.json.get("file", None)
+    #createBy = request.json.get("createBy", None)
+    #createByName = request.json.get("createByName", None)
+    year = request.form.get('year')
+    semester = request.form.get('semester')
+    file = request.form.get('file')
+    createBy = request.form.get('createBy')
+    createByName = request.form.get('createByName')
+    print(year)
+    print(semester)
+    print(file)
+    print(createBy)
+    print(createByName)
+
+    result = {
+        "success": True,
+        "msg": "Import Course Success."
+    }
+    return result
+
 def retrainModel():
     ErrorMsg = ''
     # Thực hiện detect ảnh
