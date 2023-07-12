@@ -285,24 +285,93 @@ def importCourse():
     createBy = request.form.get('createBy')
     createByName = request.form.get('createByName')
     
+    columnName = ['Mã số SV', 'Mã MH', 'Tên MH', 'Nhóm']
+
     if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        data_excel = pd.read_excel(file.read(), engine='openpyxl')  # XLSX
+        data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
     elif file.content_type == 'application/vnd.ms-excel':
-        data_excel = pd.read_excel(file.read())  # XLS
+        data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
 
     data_json_string = data_excel.to_json(orient='records')
     data = json.loads(data_json_string)
-    print(data)
+    
+    conn = connection()
+    cursor = conn.cursor()
+
     #Group By maMH, Nhom
-    data_group = groupby(data, lambda item: (item["MaMH"], item["Group"]))
+    data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
     for k,g in data_group:
         # k: Includes MaMH and Group to create 1 class
         # g: list student in class
-        print(k, list(g))
+        # Create Class
+        sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
+                         'VALUES(?,?,?,?,?,?,?,?)'
+        cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
+        record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
+        cursor.commit()
+        # Create Student in Class
+        for item in list(g):
+            sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID) VALUES(?,?)'
+            cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'))
+            cursor.commit()
+
+    conn.close()
 
     result = {
         "success": True,
         "msg": "Import Course Success."
+    }
+    return result
+
+@app.route("/importStudents", methods=["POST"])
+def importStudents():
+    file = request.files.get('file')
+    createBy = request.form.get('createBy')
+    createByName = request.form.get('createByName')
+
+    columnName = ['Mã số SV', 'Họ lót', 'Tên', 'Phái', 'Email']
+
+    if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
+    elif file.content_type == 'application/vnd.ms-excel':
+        data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
+
+    data_json_string = data_excel.to_json(orient='records')
+    data = json.loads(data_json_string)
+    
+    conn = connection()
+    cursor = conn.cursor()
+
+    for row in data:
+        sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
+                         'VALUES(?,?,?,?)'
+        cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
+        
+    cursor.commit()
+    conn.close()
+    
+    result = {
+        "success": True,
+        "msg": "Import Course Success."
+    }
+    return result
+
+@app.route("/loadCourseData", methods=["POST"])
+def loadCourseData():
+    year = request.json.get("year", None)
+    semester = request.json.get("semester", None)
+    userID = request.json.get("userID", None)
+    listCourses = []
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("Select MaMH, TenMH, Nhom, Sessions from Class where CreateBy = ? and Year = ? and Semester = ?", userID, year, semester)
+    for row in cursor.fetchall():
+        listCourses.append({"MaMH": row[0], "TenMH": row[1], "Nhom": row[2], "Sessions": row[3]})
+    conn.close()
+
+    result = {
+        "success": True,
+        "data": listCourses
     }
     return result
 
