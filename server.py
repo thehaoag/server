@@ -13,6 +13,9 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import Normalizer
 from sklearn.preprocessing import LabelEncoder
 import time
+import json
+from itertools import groupby
+import pandas as pd
 import os
 from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
@@ -276,21 +279,26 @@ def submitAttended():
 
 @app.route("/importCourse", methods=["POST"])
 def importCourse():
-    #year = request.json.get("year", None)
-    #semester = request.json.get("semester", None)
-    #file = request.json.get("file", None)
-    #createBy = request.json.get("createBy", None)
-    #createByName = request.json.get("createByName", None)
     year = request.form.get('year')
     semester = request.form.get('semester')
-    file = request.form.get('file')
+    file = request.files.get('file')
     createBy = request.form.get('createBy')
     createByName = request.form.get('createByName')
-    print(year)
-    print(semester)
-    print(file)
-    print(createBy)
-    print(createByName)
+    
+    if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        data_excel = pd.read_excel(file.read(), engine='openpyxl')  # XLSX
+    elif file.content_type == 'application/vnd.ms-excel':
+        data_excel = pd.read_excel(file.read())  # XLS
+
+    data_json_string = data_excel.to_json(orient='records')
+    data = json.loads(data_json_string)
+    print(data)
+    #Group By maMH, Nhom
+    data_group = groupby(data, lambda item: (item["MaMH"], item["Group"]))
+    for k,g in data_group:
+        # k: Includes MaMH and Group to create 1 class
+        # g: list student in class
+        print(k, list(g))
 
     result = {
         "success": True,
