@@ -255,16 +255,20 @@ def diemdanh(code):
 def updateAttened(classID, listStudents):
     conn = connection()
     cursor = conn.cursor()
+    
     for student in listStudents:
+        date = None
+        if (student.get('datesession') != None):
+            date = datetime.strptime(student.get('datesession'), "%d/%m/%Y")
         sqlUpdate = "UPDATE Attended SET Buoi" + str(student.get('session')) +" = ? Where ClassID = ? and StudentID = ?"
-        cursor.execute(sqlUpdate, student.get('datesession'), classID, student.get('mssv'))
+        cursor.execute(sqlUpdate, date, classID, student.get('mssv'))
     
     conn.commit()
     conn.close()
     return
 
 @app.route("/submitAttended", methods=["POST"])
-def submitAttended():
+def submitAttended():   
     classID = request.json.get("classID", None)
     listStudents = request.json.get("listStudents", None)
 
