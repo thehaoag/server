@@ -95,19 +95,6 @@ def generate_frames():
 def video():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-def loadListStudent(year,semester,maMH,group):
-    students = []
-    conn = connection()
-    cursor = conn.cursor()
-    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
-    for row in cursor.fetchall():
-        students.append({"mssv": row[0], "name": row[1], "session1": row[2], "session2": row[3], "session3": row[4],"session4": row[4],
-        "session5": row[2], "session6": row[3], "session7": row[4],"session8": row[2], "session9": row[3], "session10": row[4],
-        "session11": row[4], "session12": row[4], "session13": row[4], "session14": row[4], "session15": row[4]})
-    conn.close()
-
-    return students
-
 def loadListStudent_Attend(year,semester,maMH,group,session):
     students = []
     classID = 0
@@ -116,10 +103,7 @@ def loadListStudent_Attend(year,semester,maMH,group,session):
     cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
     for row in cursor.fetchall():
         classID = row[0]
-        date = row[session+2]
-        if (date):
-            date = row[session+2].strftime("%d/%m/%Y")
-        students.append({"mssv": row[1], "name": row[2], "datesession": date, "session": session})
+        students.append({"mssv": row[1], "name": row[2], "datesession": convertDateToString(row[session+2]), "session": session})
     conn.close()
 
     return students, classID
@@ -148,6 +132,38 @@ def getListStudents_Attend():
 
     return result
 
+def convertDateToString(date):
+    result = None
+    if (date):
+        result = date.strftime("%d/%m/%Y")
+    return result
+
+def loadListStudent(year,semester,maMH,group):
+    students = []
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
+    for row in cursor.fetchall():
+        students.append({"mssv": row[1], "name": row[2], 
+            "sessions": [ convertDateToString(row[3]), convertDateToString(row[4]), convertDateToString(row[5]), convertDateToString(row[6]), 
+            convertDateToString(row[7]), convertDateToString(row[8]), convertDateToString(row[9]), convertDateToString(row[10]),
+            convertDateToString(row[11]), convertDateToString(row[12]), convertDateToString(row[13]), convertDateToString(row[14]),
+            convertDateToString(row[15]), convertDateToString(row[16]), convertDateToString(row[17])],
+            'status': row[18]})
+    conn.close()
+
+    return students
+
+def getSessions(year,semester,maMH,group):
+    session = 0
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("Select Sessions from Class where Year = ? and Semester = ? and MaMH = ? and Nhom = ?", year, semester, maMH, group)
+    for row in cursor.fetchall():
+        session = row[0]
+    conn.close()
+    return session
+
 @app.route("/getListStudents", methods=["POST"])
 def getListStudents():
     year = request.json.get("year", None)
@@ -156,17 +172,54 @@ def getListStudents():
     group = request.json.get("group", None)
 
     students = loadListStudent(year,semester,maMH,group)
+    sessions = getSessions(year,semester,maMH,group)
 
     if students != [] and len(students) > 0:
         result = {
             "success": True,
-            "currentCode": code,
+            "sessions": sessions,
             "listStudents": students
         }
     else:
         result = {
             "success": False,
-            "msg": "Không tìm thấy mã lớp " + code
+            "msg": "Không tìm thấy lớp"
+        }
+
+    return result
+
+def loadListClasses(year,semester,user):
+    classes = []
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("exec GetListClass ?,?,?", year, semester, user)
+    for row in cursor.fetchall():
+        classes.append({"maMH": row[0], "TenMH": row[1], "Nhom": row[2],
+        "sessions": [ convertDateToString(row[3]), convertDateToString(row[4]), convertDateToString(row[5]), convertDateToString(row[6]), 
+            convertDateToString(row[7]), convertDateToString(row[8]), convertDateToString(row[9]), convertDateToString(row[10]),
+            convertDateToString(row[11]), convertDateToString(row[12]), convertDateToString(row[13]), convertDateToString(row[14]),
+            convertDateToString(row[15]), convertDateToString(row[16]), convertDateToString(row[17])],
+        "status": row[18], "session": row[19]})
+    conn.close()
+
+    return classes
+@app.route("/getListClass", methods=["POST"])
+def getListClass():
+    year = request.json.get("year", None)
+    semester = request.json.get("semester", None)
+    user = request.json.get("user", None)
+
+    classes = loadListClasses(year,semester,user)
+
+    if classes != [] and len(classes) > 0:
+        result = {
+            "success": True,
+            "classes": classes
+        }
+    else:
+        result = {
+            "success": False,
+            "msg": "Không tìm thấy lớp"
         }
 
     return result
@@ -315,8 +368,8 @@ def importCourse():
         cursor.commit()
         # Create Student in Class
         for item in list(g):
-            sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID) VALUES(?,?)'
-            cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'))
+            sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status) VALUES(?,?,?)'
+            cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active')
             cursor.commit()
 
     conn.close()
