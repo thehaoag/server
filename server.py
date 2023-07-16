@@ -3,6 +3,7 @@ import cv2
 import pyodbc
 import detect_face
 import imutils
+import numpy as np
 import training
 from numpy import asarray
 from numpy import expand_dims
@@ -10,8 +11,10 @@ from facenet_pytorch import MTCNN
 from keras_facenet import FaceNet
 from numpy import load
 from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import Normalizer
 from sklearn.preprocessing import LabelEncoder
+import matplotlib.pyplot as plt
 import time
 import json
 from itertools import groupby
@@ -28,34 +31,40 @@ jwt = JWTManager(app)
 
 @app.route('/login', methods=["POST"])
 def login():
-    accounts = []
-    user = request.json.get("user", None)
-    password = request.json.get("password", None)
+    try:
+        accounts = []
+        user = request.json.get("user", None)
+        password = request.json.get("password", None)
 
-    conn = connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT ID, Name, Email, Role FROM Account WHERE Username = ? and Password = ?",user, password)
+        conn = connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT ID, Name, Email, Role FROM Account WHERE Username = ? and Password = ?",user, password)
     
-    for row in cursor.fetchall():
-        accounts.append({"id": row[0], "name": row[1], "email": row[2], "role": row[3]})
+        for row in cursor.fetchall():
+            accounts.append({"id": row[0], "name": row[1], "email": row[2], "role": row[3]})
 
-    conn.close()
+        conn.close()
     
-    if accounts != [] and len(accounts) > 0:
-        account = accounts[0]
-        access_token = create_access_token(identity=user)
-        response = {"success": True,"access_token":access_token, "account": account}
-    
-    else:
-        response = {"success": False,"msg": "Wrong user or password"}
+        if accounts != [] and len(accounts) > 0:
+            account = accounts[0]
+            access_token = create_access_token(identity=user)
+            response = {"success": True,"access_token":access_token, "account": account}
+        else:
+            response = {"success": False,"msg": "Wrong user or password"}
+    except Exception as e:
+        response = {"success": False, "msg": str(e)}
 
     return response 
     
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    response = jsonify({"msg": "logout successful"})
-    unset_jwt_cookies(response)
+    try:
+        response = jsonify({"msg": "logout successful"})
+        unset_jwt_cookies(response)
+    except Exception as e:
+        response = {"success": False, "msg": str(e)}
+
     return response
 
 def connection():
@@ -110,25 +119,28 @@ def loadListStudent_Attend(year,semester,maMH,group,session):
 
 @app.route("/getListStudents_Attend", methods=["POST"])
 def getListStudents_Attend():
-    year = request.json.get("year", None)
-    semester = request.json.get("semester", None)
-    maMH = request.json.get("maMH", None)
-    group = request.json.get("group", None)
-    session = request.json.get("session", None)
+    try:
+        year = request.json.get("year", None)
+        semester = request.json.get("semester", None)
+        maMH = request.json.get("maMH", None)
+        group = request.json.get("group", None)
+        session = request.json.get("session", None)
 
-    students, classID = loadListStudent_Attend(year,semester,maMH,group,session)
-    
-    if students != [] and len(students) > 0:
-        result = {
-            "success": True,
-            "currentCode": classID,
-            "listStudents": students
-        }
-    else:
-        result = {
-            "success": False,
-            "msg": "Không tìm thấy lớp học này"
-        }
+        students, classID = loadListStudent_Attend(year,semester,maMH,group,session)
+        
+        if students != [] and len(students) > 0:
+            result = {
+                "success": True,
+                "currentCode": classID,
+                "listStudents": students
+            }
+        else:
+            result = {
+                "success": False,
+                "msg": "Không tìm thấy lớp học này"
+            }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
 
     return result
 
@@ -166,25 +178,28 @@ def getSessions(year,semester,maMH,group):
 
 @app.route("/getListStudents", methods=["POST"])
 def getListStudents():
-    year = request.json.get("year", None)
-    semester = request.json.get("semester", None)
-    maMH = request.json.get("maMH", None)
-    group = request.json.get("group", None)
+    try:
+        year = request.json.get("year", None)
+        semester = request.json.get("semester", None)
+        maMH = request.json.get("maMH", None)
+        group = request.json.get("group", None)
 
-    students = loadListStudent(year,semester,maMH,group)
-    sessions = getSessions(year,semester,maMH,group)
+        students = loadListStudent(year,semester,maMH,group)
+        sessions = getSessions(year,semester,maMH,group)
 
-    if students != [] and len(students) > 0:
-        result = {
-            "success": True,
-            "sessions": sessions,
-            "listStudents": students
-        }
-    else:
-        result = {
-            "success": False,
-            "msg": "Không tìm thấy lớp"
-        }
+        if students != [] and len(students) > 0:
+            result = {
+                "success": True,
+                "sessions": sessions,
+                "listStudents": students
+            }
+        else:
+            result = {
+                "success": False,
+                "msg": "Không tìm thấy lớp"
+            }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
 
     return result
 
@@ -205,22 +220,25 @@ def loadListClasses(year,semester,user):
     return classes
 @app.route("/getListClass", methods=["POST"])
 def getListClass():
-    year = request.json.get("year", None)
-    semester = request.json.get("semester", None)
-    user = request.json.get("user", None)
+    try:
+        year = request.json.get("year", None)
+        semester = request.json.get("semester", None)
+        user = request.json.get("user", None)
 
-    classes = loadListClasses(year,semester,user)
+        classes = loadListClasses(year,semester,user)
 
-    if classes != [] and len(classes) > 0:
-        result = {
-            "success": True,
-            "classes": classes
-        }
-    else:
-        result = {
-            "success": False,
-            "msg": "Không tìm thấy lớp"
-        }
+        if classes != [] and len(classes) > 0:
+            result = {
+                "success": True,
+                "classes": classes
+            }
+        else:
+            result = {
+                "success": False,
+                "msg": "Không tìm thấy lớp"
+            }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
 
     return result
 
@@ -238,70 +256,70 @@ def loadListStudent_Code(code):
 
 @app.route("/diemdanh/<int:code>")
 def diemdanh(code):
+    try:
+        students = loadListStudent_Code(code)
 
-    start1 = time.time()
-    students = loadListStudent_Code(code)
-    print("---Load List Student: %s seconds ---" % (time.time() - start1))
+        # Nhận dạng
+        global modelDetector 
+        global modelFacenet
+        global modelLabelEncoder
+        global modelSVC
+        global currentCamera
 
-    # Nhận dạng
-    global modelDetector 
-    global modelFacenet
-    global modelLabelEncoder
-    global modelSVC
-    global currentCamera
+        # Lặt hình lại cho đúng chiều
+        img = cv2.flip(currentCamera, 1)
+        # Thực hiện detect ảnh
+        start4 = time.time()
+        msg, face_array = detect_face.dectect(modelDetector, img)
+        print("---Detect Face: %s seconds ---" % (time.time() - start4))
+        
+        if msg == '':
+            start6 = time.time()
+            # Thực hiện chuyển đổi mảng pixel thành mảng các vector
+            embedding = training.get_embedding(modelFacenet, face_array)
+            print("---Embedding: %s seconds ---" % (time.time() - start6))
+            
+            #Predict
+            start7 = time.time()
+            # Sử dụng model SVC để dự đoán
+            samples = expand_dims(embedding, axis=0)
+            yhat_class = modelSVC.predict(samples)
+            yhat_prob = modelSVC.predict_proba(samples)
+            print("---Predict: %s seconds ---" % (time.time() - start7))
 
-    # Lặt hình lại cho đúng chiều
-    img = cv2.flip(currentCamera, 1)
-    # Thực hiện detect ảnh
-    start4 = time.time()
-    msg, face_array = detect_face.dectect(modelDetector, img)
-    print("---Detect Face: %s seconds ---" % (time.time() - start4))
-    
-    if msg == '':
-        start6 = time.time()
-        # Thực hiện chuyển đổi mảng pixel thành mảng các vector
-        embedding = training.get_embedding(modelFacenet, face_array)
-        print("---Embedding: %s seconds ---" % (time.time() - start6))
+            # Thực hiện lấy tên và phần trăm chính xác sau khi dự đoán
+            class_index = yhat_class[0]
+            class_probability = yhat_prob[0,class_index] * 100
+            predict_names = modelLabelEncoder.inverse_transform(yhat_class)
+            print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
-        #Predict
-        start7 = time.time()
-        # Sử dụng model SVC để dự đoán
-        samples = expand_dims(embedding, axis=0)
-        yhat_class = modelSVC.predict(samples)
-        yhat_prob = modelSVC.predict_proba(samples)
-        print("---Predict: %s seconds ---" % (time.time() - start7))
-
-        # Thực hiện lấy tên và phần trăm chính xác sau khi dự đoán
-        class_index = yhat_class[0]
-        class_probability = yhat_prob[0,class_index] * 100
-        predict_names = modelLabelEncoder.inverse_transform(yhat_class)
-        print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
-
-        # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
-        if (class_probability > 50.0):
-            # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
-            studentID = next((s for s in students if s == predict_names[0]),None)
-            if (studentID != None):
-                result = {
-                    "success": True,
-                    "data": studentID
-                }
-            else:
+            # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
+            if (class_probability > 50.0):
+                # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
+                studentID = next((s for s in students if s == predict_names[0]),None)
+                if (studentID != None):
+                    result = {
+                        "success": True,
+                        "data": studentID
+                    }
+                else:
+                    result = {
+                        "success": False,
+                        "msg": "Không tìm thấy sinh viên trong lớp."
+                    }
+            # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
+            else:    
                 result = {
                     "success": False,
-                    "msg": "Không tìm thấy sinh viên trong lớp."
+                    "msg": "Không tìm thấy sinh viên này trong cơ sở dữ liệu hoặc chất lượng hình ảnh kém"
                 }
-        # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
-        else:    
+        else:
             result = {
                 "success": False,
-                "msg": "Không tìm thấy sinh viên này trong cơ sở dữ liệu hoặc chất lượng hình ảnh kém"
+                "msg": msg
             }
-    else:
-        result = {
-            "success": False,
-            "msg": msg
-        }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
 
     return result
 
@@ -320,116 +338,140 @@ def updateAttened(classID, listStudents):
     conn.close()
     return
 
+def updateStatusAttend(classID):
+    
+    return
+
 @app.route("/submitAttended", methods=["POST"])
-def submitAttended():   
-    classID = request.json.get("classID", None)
-    listStudents = request.json.get("listStudents", None)
+def submitAttended():
+    try:
+        classID = request.json.get("classID", None)
+        listStudents = request.json.get("listStudents", None)
 
-    updateAttened(classID, listStudents)
+        updateAttened(classID, listStudents)
+        # updateStatusAttend(classID)
 
-    result = {
-        "success": True,
-        "msg": "Submit Attended Successful!"
-    }
+        result = {
+            "success": True,
+            "msg": "Submit Attended Successful!"
+        }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
 
     return result
 
 @app.route("/importCourse", methods=["POST"])
 def importCourse():
-    year = request.form.get('year')
-    semester = request.form.get('semester')
-    file = request.files.get('file')
-    createBy = request.form.get('createBy')
-    createByName = request.form.get('createByName')
-    
-    columnName = ['Mã số SV', 'Mã MH', 'Tên MH', 'Nhóm']
+    try:
+        year = request.form.get('year')
+        semester = request.form.get('semester')
+        file = request.files.get('file')
+        createBy = request.form.get('createBy')
+        createByName = request.form.get('createByName')
+        
+        columnName = ['Mã số SV', 'Mã MH', 'Tên MH', 'Nhóm']
 
-    if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
-    elif file.content_type == 'application/vnd.ms-excel':
-        data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
+        if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
+        elif file.content_type == 'application/vnd.ms-excel':
+            data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
 
-    data_json_string = data_excel.to_json(orient='records')
-    data = json.loads(data_json_string)
-    
-    conn = connection()
-    cursor = conn.cursor()
+        data_json_string = data_excel.to_json(orient='records')
+        data = json.loads(data_json_string)
+        
+        conn = connection()
+        cursor = conn.cursor()
 
-    #Group By maMH, Nhom
-    data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
-    for k,g in data_group:
-        # k: Includes MaMH and Group to create 1 class
-        # g: list student in class
-        # Create Class
-        sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
-                         'VALUES(?,?,?,?,?,?,?,?)'
-        cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
-        record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
-        cursor.commit()
-        # Create Student in Class
-        for item in list(g):
-            sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status) VALUES(?,?,?)'
-            cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active')
+        #Group By maMH, Nhom
+        data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
+        for k,g in data_group:
+            # k: Includes MaMH and Group to create 1 class
+            # g: list student in class
+            # Create Class
+            sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
+                            'VALUES(?,?,?,?,?,?,?,?)'
+            cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
+            record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
             cursor.commit()
+            # Create Student in Class
+            for item in list(g):
+                sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status) VALUES(?,?,?)'
+                cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active')
+                cursor.commit()
 
-    conn.close()
+        conn.close()
 
-    result = {
-        "success": True,
-        "msg": "Import Course Success."
-    }
+        result = {
+            "success": True,
+            "msg": "Import Course Success."
+        }
+    except pyodbc.Error as e:
+        result = {"success": False, "msg": "Import Course Failed."}
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
+
     return result
 
 @app.route("/importStudents", methods=["POST"])
 def importStudents():
-    file = request.files.get('file')
-    createBy = request.form.get('createBy')
-    createByName = request.form.get('createByName')
+    try:
+        file = request.files.get('file')
+        createBy = request.form.get('createBy')
+        createByName = request.form.get('createByName')
 
-    columnName = ['Mã số SV', 'Họ lót', 'Tên', 'Phái', 'Email']
+        columnName = ['Mã số SV', 'Họ lót', 'Tên', 'Phái', 'Email']
 
-    if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
-    elif file.content_type == 'application/vnd.ms-excel':
-        data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
+        if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            data_excel = pd.read_excel(file.read(), usecols=columnName, engine='openpyxl')  # XLSX
+        elif file.content_type == 'application/vnd.ms-excel':
+            data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
 
-    data_json_string = data_excel.to_json(orient='records')
-    data = json.loads(data_json_string)
-    
-    conn = connection()
-    cursor = conn.cursor()
-
-    for row in data:
-        sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
-                         'VALUES(?,?,?,?)'
-        cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
+        data_json_string = data_excel.to_json(orient='records')
+        data = json.loads(data_json_string)
         
-    cursor.commit()
-    conn.close()
-    
-    result = {
-        "success": True,
-        "msg": "Import Course Success."
-    }
+        conn = connection()
+        cursor = conn.cursor()
+
+        for row in data:
+            sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
+                            'VALUES(?,?,?,?)'
+            cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
+            
+        cursor.commit()
+        conn.close()
+        
+        result = {
+            "success": True,
+            "msg": "Import Students Success."
+        }
+    except pyodbc.Error as e:
+        result = {"success": False, "msg": "Import Students Failed."}
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
+
     return result
 
 @app.route("/loadCourseData", methods=["POST"])
 def loadCourseData():
-    year = request.json.get("year", None)
-    semester = request.json.get("semester", None)
-    userID = request.json.get("userID", None)
-    listCourses = []
-    conn = connection()
-    cursor = conn.cursor()
-    cursor.execute("Select MaMH, TenMH, Nhom, Sessions from Class where CreateBy = ? and Year = ? and Semester = ?", userID, year, semester)
-    for row in cursor.fetchall():
-        listCourses.append({"MaMH": row[0], "TenMH": row[1], "Nhom": row[2], "Sessions": row[3]})
-    conn.close()
+    try:
+        year = request.json.get("year", None)
+        semester = request.json.get("semester", None)
+        userID = request.json.get("userID", None)
+        listCourses = []
+        conn = connection()
+        cursor = conn.cursor()
+        cursor.execute("Select MaMH, TenMH, Nhom, Sessions from Class where CreateBy = ? and Year = ? and Semester = ?", userID, year, semester)
+        for row in cursor.fetchall():
+            listCourses.append({"MaMH": row[0], "TenMH": row[1], "Nhom": row[2], "Sessions": row[3]})
+        conn.close()
 
-    result = {
-        "success": True,
-        "data": listCourses
-    }
+        result = {
+            "success": True,
+            "data": listCourses
+        }
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
+
     return result
 
 def retrainModel():
@@ -491,6 +533,50 @@ def load_AllModel():
     mSVC = load_modelSVC()
     mFacenet = load_modelFaceNet()
     return mDectector, mFacenet, mSVC
+
+@app.route("/reviewModel")
+def reviewModel():
+    result = 'thanh cong'
+    global modelSVC
+    data = load('Model/faces-dataset.npz')
+
+    curtrainX, curtrainy, curtestX, curtesty = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
+
+    in_encoder = Normalizer(norm='l2')
+    trainX = in_encoder.transform(curtrainX)
+    testX = in_encoder.transform(curtestX)
+
+    global modelLabelEncoder
+    
+    modelLabelEncoder.fit(curtrainy)
+    trainy = modelLabelEncoder.transform(curtrainy)
+    testy = modelLabelEncoder.transform(curtesty)
+
+    # Danh gia
+    # predict
+    yhat_train = modelSVC.predict(trainX)
+    yhat_test = modelSVC.predict(testX)
+    # score
+    score_train = accuracy_score(trainy, yhat_train)
+    score_test = accuracy_score(testy, yhat_test)
+    # summarize
+    print('Accuracy: train=%.3f, test=%.3f' % (score_train*100, score_test*100))
+
+    plt.scatter(curtrainX,curtrainy)
+    plt.show()
+    return result
+
+def make_meshgrid(x, y, h=.02):
+    x_min, x_max = x.min() - 1, x.max() + 1
+    y_min, y_max = y.min() - 1, y.max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+    return xx, yy
+
+def plot_contours(ax, clf, xx, yy, **params):
+    Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+    out = ax.contourf(xx, yy, Z, **params)
+    return out
 
 if __name__ == "__main__":
     currentCamera = []
