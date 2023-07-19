@@ -20,7 +20,9 @@ def training_Array(Images,dataDir):
         faces = []
         for path in img.image_paths:
             currentImg = cv2.imread(os.path.join(currentDir,path))
-            faces.append(currentImg) 
+            image = cv2.cvtColor(currentImg, cv2.COLOR_BGR2RGB)
+            face_array = asarray(image)
+            faces.append(face_array) 
 
         labels = [img.name for _ in range(len(faces))]
 
@@ -31,8 +33,12 @@ def training_Array(Images,dataDir):
 
 def get_embedding(model, face_pixels):
     face_pixels = face_pixels.astype('float32')
+    # standardize pixel values across channels (global)
+    mean, std = face_pixels.mean(), face_pixels.std()
+    face_pixels = (face_pixels - mean) / std
+    # transform face into one sample
     samples = expand_dims(face_pixels, axis=0)
-    yhat = model.embeddings(samples)
+    yhat = model.predict(samples)
     return yhat[0]
 
 def split_data(dataDir, currentStudentTrain = []):
