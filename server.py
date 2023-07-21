@@ -269,7 +269,6 @@ def diemdanh(code):
 
         # Lặt hình lại cho đúng chiều
         img = cv2.flip(currentCamera, 1)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # Thực hiện detect ảnh
         start4 = time.time()
         msg, face_array = detect_face.dectect(modelDetector, img)
@@ -280,11 +279,13 @@ def diemdanh(code):
             # Thực hiện chuyển đổi mảng pixel thành mảng các vector
             embedding = training.get_embedding(modelFacenet, face_array)
             print("---Embedding: %s seconds ---" % (time.time() - start6))
-            print(embedding.shape)
+            embedding = embedding.reshape(1,-1)
+            in_encoder = Normalizer(norm='l2')
+            trainX = in_encoder.transform(embedding)
             #Predict
             start7 = time.time()
             # Sử dụng model SVC để dự đoán
-            samples = expand_dims(embedding, axis=0)
+            samples = expand_dims(trainX[0], axis=0)
             yhat_class = modelSVC.predict(samples)
             yhat_prob = modelSVC.predict_proba(samples)
             print("---Predict: %s seconds ---" % (time.time() - start7))
@@ -293,11 +294,10 @@ def diemdanh(code):
             class_index = yhat_class[0]
             class_probability = yhat_prob[0,class_index] * 100
             predict_names = modelLabelEncoder.inverse_transform(yhat_class)
-            print(yhat_prob)
             print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
             # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
-            if (class_probability > 70.0):
+            if (class_probability > 50.0):
                 # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
                 studentID = next((s for s in students if s == predict_names[0]),None)
                 if (studentID != None):
@@ -479,16 +479,14 @@ def loadCourseData():
 
 def retrainModel():
     ErrorMsg = ''
-    # Thực hiện detect ảnh
-    realPath = os.path.dirname(__file__)
-    source_dir = os.path.join(realPath, 'OriginalFace')
-    dest_dir = os.path.join(realPath, 'DetectFace') 
-    detect_face.detectData(modelDetector,source_dir,dest_dir)
-    # Bắt đầu Embedding dữ liệu ảnh mới
-    global modelFacenet
-    training.mainTraining(modelFacenet)
-    # Fit lại model vừa mới train
     global modelSVC
+    global modelFacenet
+    global modelDetector
+    # Bắt đầu Embedding dữ liệu ảnh mới
+    
+    training.mainTraining(modelDetector,modelFacenet)
+    # Fit lại model vừa mới train
+    
     modelSVC = load_modelSVC()
 
     return ErrorMsg
@@ -501,9 +499,9 @@ def themsinhvien():
 
 def load_modelSVC():
     model = SVC(kernel='linear', probability=True)
-    modelPath = os.path.join(os.path.dirname(__file__),'Model/faces-dataset.npz')
+    modelPath = os.path.join(os.path.dirname(__file__),'Model/faces-embeddings.npz')
     if os.path.exists(modelPath):
-        data = load('Model/faces-dataset.npz')
+        data = load('Model/faces-embeddings.npz')
 
         trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
@@ -522,7 +520,7 @@ def load_modelSVC():
     return model
 
 def load_AllModel():
-    mDectector = MTCNN(margin=20, select_largest=False)
+    mDectector = MTCNN(margin=10, select_largest=False)
     mSVC = load_modelSVC()
     mFacenet = load_model('facenet_keras.h5')
     return mDectector, mFacenet, mSVC
@@ -531,7 +529,7 @@ def load_AllModel():
 def reviewModel():
     result = 'thanh cong'
     global modelSVC
-    data = load('Model/faces-dataset.npz')
+    data = load('Model/faces-embeddings.npz')
 
     curtrainX, curtrainy, curtestX, curtesty = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
@@ -561,28 +559,32 @@ def reviewModel():
 def randomTest():
     global modelSVC
     # load face embeddings
-    data = load('Model/faces-dataset.npz')
+    data = load('Model/faces-embeddings.npz')
     trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
+
+    in_encoder = Normalizer(norm='l2')
+    trainX = in_encoder.transform(trainX)
+    testX = in_encoder.transform(testX)
     # label encode targets
     out_encoder = LabelEncoder()
     out_encoder.fit(trainy)
     trainy = out_encoder.transform(trainy)
     testy = out_encoder.transform(testy)
     # test model on a random example from the test dataset
-    print(testX.shape)
-    selection = choice([i for i in range(testX.shape[0])])
-    random_face_emb = testX[selection]
-    random_face_class = testy[selection]
-    random_face_name = out_encoder.inverse_transform([random_face_class])
-    # prediction for the face
-    samples = expand_dims(random_face_emb, axis=0)
-    yhat_class = modelSVC.predict(samples)
-    yhat_prob = modelSVC.predict_proba(samples)
-    # get name
-    class_index = yhat_class[0]
-    class_probability = yhat_prob[0,class_index] * 100
-    predict_names = out_encoder.inverse_transform(yhat_class)
-    print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
+    
+    for selection in range(45):
+        random_face_emb = testX[selection]
+        random_face_class = testy[selection]
+        random_face_name = out_encoder.inverse_transform([random_face_class])
+        # prediction for the face
+        samples = expand_dims(random_face_emb, axis=0)
+        yhat_class = modelSVC.predict(samples)
+        yhat_prob = modelSVC.predict_proba(samples)
+        # get name
+        class_index = yhat_class[0]
+        class_probability = yhat_prob[0,class_index] * 100
+        predict_names = out_encoder.inverse_transform(yhat_class)
+        print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
     return "done"
 
 if __name__ == "__main__":
