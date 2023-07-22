@@ -9,6 +9,7 @@ from numpy import asarray
 from numpy import expand_dims
 from facenet_pytorch import MTCNN
 from keras_facenet import FaceNet
+from keras_vggface.vggface import VGGFace
 from numpy import load
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
@@ -522,7 +523,7 @@ def load_modelSVC():
 def load_AllModel():
     mDectector = MTCNN(margin=10, select_largest=False)
     mSVC = load_modelSVC()
-    mFacenet = load_model('facenet_keras.h5')
+    mFacenet = load_model('facenet_keras.h5')#VGGFace(model='resnet50')#FaceNet()#
     return mDectector, mFacenet, mSVC
 
 @app.route("/reviewModel")

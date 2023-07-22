@@ -7,6 +7,7 @@ from numpy import savez_compressed
 from PIL import Image
 import numpy as np
 import detect_face
+from keras_vggface.utils import preprocess_input
 
 class ImageClass():
     "Stores the paths to images for a given class"
@@ -15,14 +16,25 @@ class ImageClass():
         self.image_paths = image_paths
 
 def get_embedding(model, face_pixels):
+    #Facenet H5
     face_pixels = face_pixels.astype('float32')
-    # standardize pixel values across channels (global)
     mean, std = face_pixels.mean(), face_pixels.std()
     face_pixels = (face_pixels - mean) / std
-    # transform face into one sample
     samples = expand_dims(face_pixels, axis=0)
     yhat = model.predict(samples)
     return yhat[0]
+
+    #Facenet
+    #samples = expand_dims(face_pixels, axis=0)
+    #yhat = model.embeddings(samples)
+    #return yhat[0]
+
+    #VGGFace
+    #face_pixels = face_pixels.astype('float32')
+    #samples = expand_dims(face_pixels, axis=0)
+    #samples = preprocess_input(samples, version=2)
+    #yhat = model.predict(samples)
+    #return yhat[0]
 
 def split_data(dataDir, currentStudentTrain = []):
 
@@ -57,7 +69,6 @@ def mainTraining(modelDetector, modelFacenet):
         trainImages, testImages = split_data(source_dir, currentStudentTrain)
 
         if (trainImages != [] and testImages != []):
-            print("continue train")
             newTrainX, newTrainy = detect_face.detectData(modelDetector, trainImages)
             newTestX, newTesty = detect_face.detectData(modelDetector, testImages)
 
