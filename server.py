@@ -298,7 +298,7 @@ def diemdanh(code):
             print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
             # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
-            if (class_probability > 50.0):
+            if (class_probability > 70.0):
                 # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
                 studentID = next((s for s in students if s == predict_names[0]),None)
                 if (studentID != None):
@@ -573,7 +573,7 @@ def randomTest():
     testy = out_encoder.transform(testy)
     # test model on a random example from the test dataset
     
-    for selection in range(45):
+    for selection in range(30):
         random_face_emb = testX[selection]
         random_face_class = testy[selection]
         random_face_name = out_encoder.inverse_transform([random_face_class])
