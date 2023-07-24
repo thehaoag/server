@@ -24,8 +24,17 @@ from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 from keras.models import load_model
 from random import choice
+from flask_mail import Mail, Message
 
 app = Flask(__name__)
+mail= Mail(app)
+app.config['MAIL_SERVER']='smtp.gmail.com'
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USERNAME'] = '51702014@student.tdtu.edu.vn' #securesally@gmail.com
+app.config['MAIL_PASSWORD'] = 'dwvtfqzqfqufhphf' #'SA!@#456' student: 'dwvtfqzqfqufhphf' outsidetdt: 'zlaofkvvdnxnomfx'
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = True
+mail = Mail(app)
 
 app.config["JWT_SECRET_KEY"] = "SECRET_KEY_PROJECT_ATTENDED_SYSTEM"
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
@@ -114,7 +123,7 @@ def loadListStudent_Attend(year,semester,maMH,group,session):
     cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
     for row in cursor.fetchall():
         classID = row[0]
-        students.append({"mssv": row[1], "name": row[2], "datesession": convertDateToString(row[session+2]), "session": session})
+        students.append({"mssv": row[1], "name": row[2], "datesession": row[session+2], "session": session})
     conn.close()
 
     return students, classID
@@ -146,12 +155,6 @@ def getListStudents_Attend():
 
     return result
 
-def convertDateToString(date):
-    result = None
-    if (date):
-        result = date.strftime("%d/%m/%Y")
-    return result
-
 def loadListStudent(year,semester,maMH,group):
     students = []
     conn = connection()
@@ -159,10 +162,10 @@ def loadListStudent(year,semester,maMH,group):
     cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
     for row in cursor.fetchall():
         students.append({"mssv": row[1], "name": row[2], 
-            "sessions": [ convertDateToString(row[3]), convertDateToString(row[4]), convertDateToString(row[5]), convertDateToString(row[6]), 
-            convertDateToString(row[7]), convertDateToString(row[8]), convertDateToString(row[9]), convertDateToString(row[10]),
-            convertDateToString(row[11]), convertDateToString(row[12]), convertDateToString(row[13]), convertDateToString(row[14]),
-            convertDateToString(row[15]), convertDateToString(row[16]), convertDateToString(row[17])],
+            "sessions": [ row[3], row[4], row[5], row[6], 
+            row[7], row[8], row[9], row[10],
+            row[11], row[12], row[13], row[14],
+            row[15], row[16], row[17]],
             'status': row[18]})
     conn.close()
 
@@ -212,10 +215,10 @@ def loadListClasses(year,semester,user):
     cursor.execute("exec GetListClass ?,?,?", year, semester, user)
     for row in cursor.fetchall():
         classes.append({"maMH": row[0], "TenMH": row[1], "Nhom": row[2],
-        "sessions": [ convertDateToString(row[3]), convertDateToString(row[4]), convertDateToString(row[5]), convertDateToString(row[6]), 
-            convertDateToString(row[7]), convertDateToString(row[8]), convertDateToString(row[9]), convertDateToString(row[10]),
-            convertDateToString(row[11]), convertDateToString(row[12]), convertDateToString(row[13]), convertDateToString(row[14]),
-            convertDateToString(row[15]), convertDateToString(row[16]), convertDateToString(row[17])],
+        "sessions": [ row[3], row[4], row[5], row[6], 
+            row[7], row[8], row[9], row[10],
+            row[11], row[12], row[13], row[14],
+            row[15], row[16], row[17]],
         "status": row[18], "session": row[19]})
     conn.close()
 
@@ -298,7 +301,7 @@ def diemdanh(code):
             print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
             # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
-            if (class_probability > 70.0):
+            if (class_probability > 65.0):
                 # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
                 studentID = next((s for s in students if s == predict_names[0]),None)
                 if (studentID != None):
@@ -330,11 +333,10 @@ def diemdanh(code):
 def updateAttened(classID, listStudents):
     conn = connection()
     cursor = conn.cursor()
-    
     for student in listStudents:
-        date = None
+        date = 'V'
         if (student.get('datesession') != None):
-            date = datetime.strptime(student.get('datesession'), "%d/%m/%Y")
+            date = student.get('datesession')
         sqlUpdate = "UPDATE Attended SET Buoi" + str(student.get('session')) +" = ? Where ClassID = ? and StudentID = ?"
         cursor.execute(sqlUpdate, date, classID, student.get('mssv'))
     
@@ -342,8 +344,83 @@ def updateAttened(classID, listStudents):
     conn.close()
     return
 
-def updateStatusAttend(classID):
+def getClassInfoByID(classID):
+    classInfo = 0
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("Select * from Class where ID = ?", classID)
+    for row in cursor.fetchall():
+        classInfo = { "Year": row[1], "Semester": row[2], "MaMH": row[3], "TenMH": row[4], "Nhom": row[5], "Session": row[6]}
+    conn.close()
+    return classInfo
+
+def getListStudentByID(classID):
+    listStudents = []
+    conn = connection()
+    cursor = conn.cursor()
+    cursor.execute("exec GetListStudentsToSendEmail ?", classID)
+    for row in cursor.fetchall():
+        listStudents.append({"mssv": row[0], "name": row[1], "email": row[2],
+            "sessions": [ row[3], row[4], row[5], row[6], 
+            row[7], row[8], row[9], row[10],
+            row[11], row[12], row[13], row[14],
+            row[15], row[16], row[17]],
+            'isSendEmail': row[18]})
+    conn.close()
+
+    return listStudents
+
+def updateStatus(classID, mssv, status, isSendEmail):
+
+    conn = connection()
+    cursor = conn.cursor()
+
+    sqlUpdate = "UPDATE Attended SET Status = ?, IsSendEmail = ?  Where ClassID = ? and StudentID = ?"
+    cursor.execute(sqlUpdate, status, isSendEmail, classID, mssv)
     
+    conn.commit()
+    conn.close()
+
+    return
+
+def sendEmailWarning(classInfo, email):
+
+    year = f"{classInfo['Year']-1}-{classInfo['Year']}"
+    time = f"HK{classInfo['Semester']}/{year}"
+    subject = f"Cảnh báo cấm thi {time}"
+    body = f"""Thân chào sinh viên,
+
+Sinh viên nhận được email này đang nằm trong diện bị cảnh báo cấm thi môn {classInfo['MaMH']} - {classInfo['TenMH']}, Nhóm {classInfo['Nhom']} {time}.
+Nếu sinh viên nghỉ thêm bất kỳ buổi học nào thì sinh viên sẽ bị cấm thi.
+
+Trân trọng,"""
+
+    msg = Message(subject, sender = ('System Attend','SystemAttend@student.tdtu.edu.vn'), recipients = [email])
+    msg.body = body
+    mail.send(msg)
+    
+    return
+
+def checkWarning(classID):
+
+    # Lấy thông tin của lớp học và tính ra số buổi dc phép nghỉ
+    classInfo = getClassInfoByID(classID)
+    canAbsolute = classInfo['Session'] * 20 // 100
+    #print(f"Số buổi được phép nghỉ: {canAbsolute}")
+    # Lấy dữ liệu của tất cả sinh viên theo lớp
+    listStudents = getListStudentByID(classID)
+    # Kiểm tra từng sinh viên và update status cũng như gửi mail cảnh báo
+    for student in listStudents:
+        absolute = student['sessions'].count('V')
+        #print(f"Số buổi vắng của sinh viên {student['mssv']}: {absolute}")
+        if (canAbsolute == absolute):
+            # Gửi Email cảnh báo và chuyển status sv thành warning
+            if (student['isSendEmail'] != True):
+                sendEmailWarning(classInfo, student['email'])
+                updateStatus(classID, student['mssv'], 'Warning', 1)
+        elif (canAbsolute < absolute):
+            # Chuyyển status sinh viên thành Cấm thi
+            updateStatus(classID, student['mssv'], 'Ban', 1)
     return
 
 @app.route("/submitAttended", methods=["POST"])
@@ -353,7 +430,8 @@ def submitAttended():
         listStudents = request.json.get("listStudents", None)
 
         updateAttened(classID, listStudents)
-        # updateStatusAttend(classID)
+        
+        checkWarning(classID)
 
         result = {
             "success": True,
@@ -399,8 +477,8 @@ def importCourse():
             cursor.commit()
             # Create Student in Class
             for item in list(g):
-                sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status) VALUES(?,?,?)'
-                cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active')
+                sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status, IsSendEmail) VALUES(?,?,?,?)'
+                cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active', False)
                 cursor.commit()
 
         conn.close()
@@ -587,6 +665,13 @@ def randomTest():
         predict_names = out_encoder.inverse_transform(yhat_class)
         print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
     return "done"
+
+@app.route("/testEmail")
+def testEmail():
+    msg = Message('This is Subject from email inside tdt', sender = ('System Attend','SystemAttend@student.tdtu.edu.vn'), recipients = ['51702014@student.tdtu.edu.vn'])
+    msg.body = "This is new the email body"
+    mail.send(msg)
+    return 'Send Email success!'
 
 if __name__ == "__main__":
     currentCamera = []

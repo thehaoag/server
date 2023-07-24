@@ -102,7 +102,6 @@ def mainTraining(modelDetector, modelFacenet):
             savez_compressed('Model/faces-embeddings.npz', resultTrainX, resultTrainy, resultTestX, resultTesty)
     # Dữ liệu mới
     else:
-
         trainImages, testImages = split_data(source_dir)
 
         trainX, trainy = detect_face.detectData(modelDetector, trainImages)
