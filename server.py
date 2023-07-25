@@ -673,6 +673,12 @@ def testEmail():
     mail.send(msg)
     return 'Send Email success!'
 
+@app.route("/testLoading")
+def testLoading():
+    time.sleep(5)
+    result = {"success": True, "msg": "done"}
+    return result
+
 if __name__ == "__main__":
     currentCamera = []
     modelLabelEncoder = LabelEncoder()
