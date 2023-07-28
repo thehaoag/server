@@ -45,12 +45,13 @@ def split_data(dataDir, currentStudentTrain = []):
         # Nếu đã tồn tại trong dữ liệu train thì không cần train nữa
         if (currentStudentTrain != [] and dir_person in currentStudentTrain):
             continue
-        
+        #print(f"Direct Name: {dir_person}")
         listImages = os.listdir(os.path.join(dataDir,dir_person))
-
+        #print(f"List Image: {listImages}")
         dataTest = listImages[-5:]    
+        #print(f"List Tes: {dataTest}")
         dataTrain = set(listImages) - set(dataTest)
-    
+        #print(f"List Train: {dataTrain}")
         train_set.append(ImageClass(dir_person, dataTrain))
         test_set.append(ImageClass(dir_person, dataTest))
 

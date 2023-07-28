@@ -25,6 +25,7 @@ from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, u
 from keras.models import load_model
 from random import choice
 from flask_mail import Mail, Message
+from PIL import Image
 
 app = Flask(__name__)
 mail= Mail(app)
@@ -442,6 +443,14 @@ def submitAttended():
 
     return result
 
+def CheckExistCourse(cursor, year, semester, createBy, data_group):
+    sql = 'SELECT COUNT(1) FROM Class WHERE Year = ? and Semester = ? and MaMH = ? and Nhom = ? and CreateBy = ?'
+    for k,g in data_group:
+        cursor.execute(sql, year, semester, k[0], k[2],createBy)
+        if cursor.fetchone()[0]:
+            return True
+    return False
+
 @app.route("/importCourse", methods=["POST"])
 def importCourse():
     try:
@@ -466,6 +475,13 @@ def importCourse():
 
         #Group By maMH, Nhom
         data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
+        # Check exist course:
+        if (CheckExistCourse(cursor,year, semester, createBy, data_group)):
+            result = {
+                "success": False,
+                "msg": "Please check your data for duplicate courses."
+            }
+            return result
         for k,g in data_group:
             # k: Includes MaMH and Group to create 1 class
             # g: list student in class
@@ -680,7 +696,7 @@ def testLoading():
     return result
 
 if __name__ == "__main__":
-    currentCamera = []
+    currentCamera = cv2.imread('camera.jpg')
     modelLabelEncoder = LabelEncoder()
     modelDetector, modelFacenet, modelSVC = load_AllModel()
     app.run(debug=True)
