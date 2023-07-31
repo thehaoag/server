@@ -3,18 +3,32 @@ import cv2
 import os
 from numpy import asarray
 
-def detectData(model, Images, required_size = (160,160)):
-    realPath = os.path.dirname(__file__)
-    source_path = os.path.join(realPath, 'OriginalFace')
-    X, y = list(), list()
+def detectData(model, source_dir, dest_dir, required_size = (160,160)):
+    # Nếu chưa có folder DetectFace thì tạo mới
+    if os.path.exists(dest_dir)==False:
+        os.mkdir(dest_dir)
     # Chạy từng Folder của mỗi người trong thư mục Original Face
-    for person in Images:
-        faces = list()
+    for dir_person in os.listdir(source_dir):
+        # dir_person là tên thư mục với MSSV
+        source_path = os.path.join(source_dir,dir_person)
+        # Kiểm tra nếu ko phải folder thì bỏ qua
+        if not os.path.isdir(source_path):
+            continue
+
+        # Tạo ra folder của người đó bên phía đã detect nếu chưa có
+        detect_path = os.path.join(dest_dir,dir_person)
+        if os.path.exists(detect_path)==False:
+            os.mkdir(detect_path)
+        # Load tất cả file hình trong thư mục của người đó bên phía Original
+        source_list = os.listdir(source_path)
         # Bắt đầu detect khuôn mặt trong những bức ảnh đó
-        for f in person.image_paths:
+        for f in source_list:
             # f_path là file hình gốc; dest_path là file kết quả
-            dir_person = os.path.join(source_path,person.name)
-            f_path=os.path.join(dir_person, f)
+            f_path=os.path.join(source_path, f)
+            dest_path=os.path.join(detect_path,f)
+            # Nếu hình đó đã detect rồi thì ko cần thực hiện lại lần nữa
+            if os.path.exists(dest_path):
+                continue
             # Nếu chưa thì chuyển hình đó thành hình với 3 màu RGB
             img = cv2.cvtColor(cv2.imread(f_path), cv2.COLOR_BGR2RGB)
             # Thực hiện detect khuôn mặt trên ảnh
@@ -30,16 +44,14 @@ def detectData(model, Images, required_size = (160,160)):
                 if (int(box[1]) < 0 ):
                     box[1] = 0
                 face = img[int(box[1]) : int(box[3]),int(box[0]) : int(box[2])]
+                # Chuyển về màu gốc
+                image = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
                 # Resize khuôn mặt về 1 kích cỡ
-                resultImage = Image.fromarray(face)
+                resultImage = Image.fromarray(image)
                 resultImage = resultImage.resize(required_size)
                 face_array = asarray(resultImage)
-                faces.append(face_array)
-
-        labels = [person.name for _ in range(len(faces))]
-        X.extend(faces)
-        y.extend(labels)
-    return asarray(X), asarray(y)
+                # Sau đó lưu vào folde kết quả
+                cv2.imwrite(dest_path, face_array)
 
 def dectect(model, image, required_size = (160,160)):
     face_array = []

@@ -26,6 +26,9 @@ from keras.models import load_model
 from random import choice
 from flask_mail import Mail, Message
 from PIL import Image
+from numpy import savez_compressed
+import shutil
+import zipfile
 
 app = Flask(__name__)
 mail= Mail(app)
@@ -302,7 +305,7 @@ def diemdanh(code):
             print('Predicted: %s (%.3f)' % (predict_names[0], class_probability))
 
             # Nếu phần trăm dự đoán trên 50 thì trả về thông tin sinh viên đó
-            if (class_probability > 65.0):
+            if (class_probability > 60.0):
                 # Kiểm tra sinh viên đó có phải trong lớp đang điểm danh hay không
                 studentID = next((s for s in students if s == predict_names[0]),None)
                 if (studentID != None):
@@ -443,12 +446,19 @@ def submitAttended():
 
     return result
 
-def CheckExistCourse(cursor, year, semester, createBy, data_group):
+def CheckExistCourse(year, semester, createBy, data_group):
+    conn = connection()
+    cursor = conn.cursor()
+
     sql = 'SELECT COUNT(1) FROM Class WHERE Year = ? and Semester = ? and MaMH = ? and Nhom = ? and CreateBy = ?'
     for k,g in data_group:
         cursor.execute(sql, year, semester, k[0], k[2],createBy)
         if cursor.fetchone()[0]:
+            conn.close()
             return True
+    
+    conn.close()
+
     return False
 
 @app.route("/importCourse", methods=["POST"])
@@ -470,39 +480,39 @@ def importCourse():
         data_json_string = data_excel.to_json(orient='records')
         data = json.loads(data_json_string)
         
-        conn = connection()
-        cursor = conn.cursor()
-
         #Group By maMH, Nhom
+        data_group_check = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
         data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
         # Check exist course:
-        if (CheckExistCourse(cursor,year, semester, createBy, data_group)):
+        if (CheckExistCourse(year, semester, createBy, data_group_check)):
             result = {
                 "success": False,
                 "msg": "Please check your data for duplicate courses."
             }
-            return result
-        for k,g in data_group:
-            # k: Includes MaMH and Group to create 1 class
-            # g: list student in class
-            # Create Class
-            sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
-                            'VALUES(?,?,?,?,?,?,?,?)'
-            cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
-            record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
-            cursor.commit()
-            # Create Student in Class
-            for item in list(g):
-                sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status, IsSendEmail) VALUES(?,?,?,?)'
-                cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'active', False)
+        else:
+            conn = connection()
+            cursor = conn.cursor()
+            for k,g in data_group:
+                # k: Includes MaMH and Group to create 1 class
+                # g: list student in class
+                # Create Class
+                sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
+                                'VALUES(?,?,?,?,?,?,?,?)'
+                cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
+                record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
                 cursor.commit()
+                # Create Student in Class
+                for item in list(g):
+                    sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status, IsSendEmail) VALUES(?,?,?,?)'
+                    cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'Active', False)
+                    cursor.commit()
 
-        conn.close()
+            conn.close()
 
-        result = {
-            "success": True,
-            "msg": "Import Course Success."
-        }
+            result = {
+                "success": True,
+                "msg": "Import Course Success."
+            }
     except pyodbc.Error as e:
         result = {"success": False, "msg": "Import Course Failed."}
     except Exception as e:
@@ -549,6 +559,36 @@ def importStudents():
 
     return result
 
+@app.route("/importFaces", methods=["POST"])
+def importFaces():
+    try:
+        file = request.files.get('file')
+        createBy = request.form.get('createBy')
+        createByName = request.form.get('createByName')
+
+        realPath = os.path.dirname(__file__)
+        source_dir = os.path.join(realPath, 'OriginalFace')
+        filename = file.filename
+        # Lưu file về thư mục OriginalFace
+        file.save(os.path.join(source_dir, filename))
+        # Giải nén file
+        zip_ref = zipfile.ZipFile(os.path.join(source_dir, filename), 'r')
+        zip_ref.extractall(source_dir)
+        zip_ref.close()
+        # Xóa file
+        os.remove(os.path.join(source_dir, filename))
+
+        result = {
+            "success": True,
+            "msg": "Import Faces Success."
+        }
+    except pyodbc.Error as e:
+        result = {"success": False, "msg": "Import Faces Failed."}
+    except Exception as e:
+        result = {"success": False, "msg": str(e)}
+
+    return result
+
 @app.route("/loadCourseData", methods=["POST"])
 def loadCourseData():
     try:
@@ -572,24 +612,33 @@ def loadCourseData():
 
     return result
 
-def retrainModel():
-    ErrorMsg = ''
+def retrain():
     global modelSVC
     global modelFacenet
     global modelDetector
+
+    # Thực hiện detect ảnh
+    realPath = os.path.dirname(__file__)
+    source_dir = os.path.join(realPath, 'OriginalFace')
+    dest_dir = os.path.join(realPath, 'DetectFace') 
+    detect_face.detectData(modelDetector,source_dir,dest_dir)
+
     # Bắt đầu Embedding dữ liệu ảnh mới
-    
-    training.mainTraining(modelDetector,modelFacenet)
+    training.mainTraining(modelFacenet)
+
     # Fit lại model vừa mới train
-    
     modelSVC = load_modelSVC()
 
-    return ErrorMsg
 
-@app.route("/themsinhvien")
-def themsinhvien():
-    result = 'thanh cong'
-    ErrorMsg = retrainModel()
+@app.route("/retrainModel")
+def retrainModel():
+
+    retrain()
+
+    result = {
+        "success": True,
+        "msg": "Train Data Success"
+    }
     return result
 
 def load_modelSVC():
@@ -667,7 +716,7 @@ def randomTest():
     testy = out_encoder.transform(testy)
     # test model on a random example from the test dataset
     
-    for selection in range(30):
+    for selection in range(50):
         random_face_emb = testX[selection]
         random_face_class = testy[selection]
         random_face_name = out_encoder.inverse_transform([random_face_class])
@@ -689,9 +738,45 @@ def testEmail():
     mail.send(msg)
     return 'Send Email success!'
 
-@app.route("/testLoading")
-def testLoading():
-    time.sleep(5)
+@app.route("/testRemoveFace")
+def testRemoveFace():
+    
+    data = load('Model/faces-embeddings.npz')
+    trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
+    listRemove = []
+    listRemoveTest = []
+
+    total_range = trainy.shape[0]
+    for index in range(total_range):
+        if trainy[index] == '51702014':
+            listRemove.append(index)
+    
+    trainX = np.delete(trainX, listRemove, 0)
+    trainy = np.delete(trainy, listRemove, 0)
+    
+    total_range_test = testy.shape[0]
+    for index in range(total_range_test):
+        if testy[index] == '51702014':
+            listRemoveTest.append(index)
+    
+    testX = np.delete(testX, listRemoveTest, 0)
+    testy = np.delete(testy, listRemoveTest, 0)
+
+    savez_compressed('Model/faces-embeddings.npz', trainX, trainy, testX, testy)
+
+    #Remove folder detect
+    realPath = os.path.dirname(__file__)
+    dest_dir = os.path.join(realPath, 'DetectFace')
+    student_dectect_Dir = os.path.join(dest_dir, '51702014')
+    shutil.rmtree(student_dectect_Dir)
+
+    origin_dir = os.path.join(realPath, 'OriginalFace')
+    student_origin_Dir = os.path.join(origin_dir, '51702014')
+    shutil.rmtree(student_origin_Dir)
+
+    global modelSVC
+    modelSVC = load_modelSVC()
+
     result = {"success": True, "msg": "done"}
     return result
 
