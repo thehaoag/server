@@ -29,6 +29,7 @@ from PIL import Image
 from numpy import savez_compressed
 import shutil
 import zipfile
+import urllib.request
 
 app = Flask(__name__)
 mail= Mail(app)
@@ -91,33 +92,6 @@ def connection():
     cstr = 'DRIVER={SQL Server};SERVER='+s+';DATABASE='+d+';Trusted_Connection=yes'
     conn = pyodbc.connect(cstr)
     return conn
-
-def generate_frames():
-    result = []
-    
-    camera = cv2.VideoCapture(0)  
-
-    while True:
-        #read camera frame        
-        success,frame = camera.read()
-        if not success:
-            break
-        global currentCamera
-        currentCamera = frame
-        frame = imutils.resize(frame, width=600)
-        frame = cv2.flip(frame, 1)
-
-        cv2.imwrite('camera.jpg', frame)
-
-        yield(b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' + open('camera.jpg', 'rb').read() + b'\r\n')
-
-    camera.release()
-    cv2.destroyAllWindows()
-
-@app.route("/video")
-def video():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def loadListStudent_Attend(year,semester,maMH,group,session):
     students = []
@@ -263,9 +237,16 @@ def loadListStudent_Code(code):
 
     return students
 
-@app.route("/diemdanh/<int:code>")
-def diemdanh(code):
+@app.route("/diemdanh",methods=["POST"])
+def diemdanh():
     try:
+        code = request.form.get("code")
+        file = request.form.get("file")
+        
+        urllib.request.urlretrieve(file, "image-camera.jpg")
+        
+        image_camera = cv2.imread('image-camera.jpg')
+
         students = loadListStudent_Code(code)
 
         # Nhận dạng
@@ -273,10 +254,9 @@ def diemdanh(code):
         global modelFacenet
         global modelLabelEncoder
         global modelSVC
-        global currentCamera
 
         # Lặt hình lại cho đúng chiều
-        img = cv2.flip(currentCamera, 1)
+        img = cv2.flip(image_camera, 1)
         # Thực hiện detect ảnh
         start4 = time.time()
         msg, face_array = detect_face.dectect(modelDetector, img)
@@ -311,6 +291,7 @@ def diemdanh(code):
                 if (studentID != None):
                     result = {
                         "success": True,
+                        "msg": f"Sinh viên {predict_names[0]} điểm danh thành công",
                         "data": studentID
                     }
                 else:
@@ -319,10 +300,15 @@ def diemdanh(code):
                         "msg": "Không tìm thấy sinh viên trong lớp."
                     }
             # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
-            else:    
+            elif (class_probability > 45.0):    
                 result = {
                     "success": False,
-                    "msg": "Không tìm thấy sinh viên này trong cơ sở dữ liệu hoặc chất lượng hình ảnh kém"
+                    "msg": "Chất lượng hình ảnh kém hãy thử lại."
+                }
+            else:
+                result = {
+                    "success": False,
+                    "msg": "Không tìm thấy sinh viên trong cơ sở dữ liệu khuôn mặt."
                 }
         else:
             result = {
@@ -667,6 +653,11 @@ def load_AllModel():
     mDectector = MTCNN(margin=10, select_largest=False)
     mSVC = load_modelSVC()
     mFacenet = load_model('facenet_keras.h5')#VGGFace(model='resnet50')#FaceNet()#
+    # First using model
+    image_test = cv2.imread('image_loading.jpg')
+    msg, face_array = detect_face.dectect(mDectector, image_test)
+    embedding = training.get_embedding(mFacenet, face_array)
+
     return mDectector, mFacenet, mSVC
 
 @app.route("/reviewModel")
@@ -781,7 +772,6 @@ def testRemoveFace():
     return result
 
 if __name__ == "__main__":
-    currentCamera = cv2.imread('camera.jpg')
     modelLabelEncoder = LabelEncoder()
     modelDetector, modelFacenet, modelSVC = load_AllModel()
     app.run(debug=True)
