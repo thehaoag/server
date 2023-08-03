@@ -506,6 +506,21 @@ def importCourse():
 
     return result
 
+def CheckExistStudents(data):
+    conn = connection()
+    cursor = conn.cursor()
+
+    sql = 'SELECT COUNT(1) FROM Students WHERE ID = ?'
+    for item in data:
+        cursor.execute(sql, item.get('Mã số SV'))
+        if cursor.fetchone()[0]:
+            conn.close()
+            return True
+    
+    conn.close()
+
+    return False
+
 @app.route("/importStudents", methods=["POST"])
 def importStudents():
     try:
@@ -521,23 +536,30 @@ def importStudents():
             data_excel = pd.read_excel(file.read(), usecols=columnName)  # XLS
 
         data_json_string = data_excel.to_json(orient='records')
+        data_check = json.loads(data_json_string)
         data = json.loads(data_json_string)
-        
-        conn = connection()
-        cursor = conn.cursor()
 
-        for row in data:
-            sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
-                            'VALUES(?,?,?,?)'
-            cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
+        if (CheckExistStudents(data_check)):
+            result = {
+                "success": False,
+                "msg": "Please check your data for duplicate student."
+            }
+        else:
+            conn = connection()
+            cursor = conn.cursor()
+
+            for row in data:
+                sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
+                                'VALUES(?,?,?,?)'
+                cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
+                
+            cursor.commit()
+            conn.close()
             
-        cursor.commit()
-        conn.close()
-        
-        result = {
-            "success": True,
-            "msg": "Import Students Success."
-        }
+            result = {
+                "success": True,
+                "msg": "Import Students Success."
+            }
     except pyodbc.Error as e:
         result = {"success": False, "msg": "Import Students Failed."}
     except Exception as e:
