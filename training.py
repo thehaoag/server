@@ -7,7 +7,7 @@ from numpy import savez_compressed
 from PIL import Image
 import numpy as np
 import detect_face
-from keras_vggface.utils import preprocess_input
+# from keras_vggface.utils import preprocess_input
 
 class ImageClass():
     "Stores the paths to images for a given class"
@@ -78,7 +78,7 @@ def mainTraining(modelFacenet):
     # Nếu đã từng Embedding dữ liệu rồi
     if os.path.exists(os.path.join(realPath,'Model/faces-embeddings.npz')):
         # Load Model cũ lên
-        data = load('Model/faces-embeddings.npz')
+        data = load(os.path.join(realPath,'Model/faces-embeddings.npz'))
         currTrainX, currTrainy, currTestX, currTesty = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
         currentStudentTrain = list(set(currTrainy))
 
@@ -105,7 +105,7 @@ def mainTraining(modelFacenet):
             resultTestX = np.append(currTestX, newTestX , axis=0)
             resultTesty = np.append(currTesty, testY , axis=0)
 
-            savez_compressed('Model/faces-embeddings.npz', resultTrainX, resultTrainy, resultTestX, resultTesty)
+            savez_compressed(os.path.join(realPath,'Model/faces-embeddings.npz'), resultTrainX, resultTrainy, resultTestX, resultTesty)
     # Dữ liệu mới
     else:
         trainImages, testImages = split_data(detect_dir)
@@ -125,5 +125,5 @@ def mainTraining(modelFacenet):
             newTestX.append(embedding)
         newTestX = asarray(newTestX)
 
-        savez_compressed('Model/faces-embeddings.npz', newTrainX, trainY, newTestX, testY)
+        savez_compressed(os.path.join(realPath,'Model/faces-embeddings.npz'), newTrainX, trainY, newTestX, testY)
 

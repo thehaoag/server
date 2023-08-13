@@ -8,8 +8,8 @@ import training
 from numpy import asarray
 from numpy import expand_dims
 from facenet_pytorch import MTCNN
-from keras_facenet import FaceNet
-from keras_vggface.vggface import VGGFace
+# from keras_facenet import FaceNet
+# from keras_vggface.vggface import VGGFace
 from numpy import load
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
@@ -23,15 +23,21 @@ import os
 from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 from keras.models import load_model
-from random import choice
+# from random import choice
 from flask_mail import Mail, Message
-from PIL import Image
+# from PIL import Image
 from numpy import savez_compressed
 import shutil
 import zipfile
 import urllib.request
+import mysql.connector
+from flask_cors import CORS, cross_origin
 
 app = Flask(__name__)
+api_cors_config = { "origins": ["https://app-regconize-tdt.onrender.com"], "methods": ["OPTIONS","GET","POST"]}
+CORS(app, resources={ r"/*": api_cors_config})
+#CORS(app)
+#app.config['CORS_HEADERS'] = 'Content-Type'
 mail= Mail(app)
 app.config['MAIL_SERVER']='smtp.gmail.com'
 app.config['MAIL_PORT'] = 465
@@ -46,21 +52,25 @@ app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
 jwt = JWTManager(app)
 
 @app.route('/login', methods=["POST"])
+#@cross_origin()
 def login():
     try:
+        print('Access Login success')
         accounts = []
         user = request.json.get("user", None)
         password = request.json.get("password", None)
 
         conn = connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT ID, Name, Email, Role FROM Account WHERE Username = ? and Password = ?",user, password)
-    
+        sql = "SELECT ID, Name, Email, Role FROM Account WHERE Username = %s and Password = %s"
+        param = (user, password,)
+        cursor.execute(sql, param)
+
         for row in cursor.fetchall():
             accounts.append({"id": row[0], "name": row[1], "email": row[2], "role": row[3]})
 
         conn.close()
-    
+
         if accounts != [] and len(accounts) > 0:
             account = accounts[0]
             access_token = create_access_token(identity=user)
@@ -70,8 +80,8 @@ def login():
     except Exception as e:
         response = {"success": False, "msg": str(e)}
 
-    return response 
-    
+    return response
+
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -84,13 +94,16 @@ def logout():
     return response
 
 def connection():
-    s = '.' #Your server name 
-    d = 'DoAn' 
-    u = '' #Your login
-    p = '' #Your login password
+    #s = 'thehaoag.mysql.pythonanywhere-services.com' #Your server name
+    #d = 'DoAn'
+    #u = 'sa' #Your login
+    #p = 'M@st3rm1nd!@#'#'dbpassword123' #Your login password
     #cstr = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER='+s+';DATABASE='+d+';UID='+u+';PWD='+ p
-    cstr = 'DRIVER={SQL Server};SERVER='+s+';DATABASE='+d+';Trusted_Connection=yes'
-    conn = pyodbc.connect(cstr)
+    #cstr = 'DRIVER={SQL Server};SERVER='+s+';DATABASE='+d+';Trusted_Connection=yes'
+    #os.environ["ODBCSYSINI"] = "/home/thehaoag/mysite"
+    #conn = pyodbc.connect('DSN=sqlserverdatasource;Uid='+ u +';Pwd=' + p + ';Encrypt=yes;Connection Timeout=30;')
+    #conn = pyodbc.connect(cstr)
+    conn = mysql.connector.connect(host="thehaoag.mysql.pythonanywhere-services.com",user="thehaoag",password="dbpassword123",database="thehaoag$DoAn")
     return conn
 
 def loadListStudent_Attend(year,semester,maMH,group,session):
@@ -98,7 +111,9 @@ def loadListStudent_Attend(year,semester,maMH,group,session):
     classID = 0
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
+    sql = "call GetListStudents(%s,%s,%s,%s)"
+    param = (year, semester, maMH, group, )
+    cursor.execute(sql,param)
     for row in cursor.fetchall():
         classID = row[0]
         students.append({"mssv": row[1], "name": row[2], "datesession": row[session+2], "session": session})
@@ -116,7 +131,7 @@ def getListStudents_Attend():
         session = request.json.get("session", None)
 
         students, classID = loadListStudent_Attend(year,semester,maMH,group,session)
-        
+
         if students != [] and len(students) > 0:
             result = {
                 "success": True,
@@ -137,10 +152,12 @@ def loadListStudent(year,semester,maMH,group):
     students = []
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("exec GetListStudents ?,?,?,?", year, semester, maMH, group)
+    sql = "call GetListStudents(%s,%s,%s,%s)"
+    param = (year, semester, maMH, group,)
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
-        students.append({"mssv": row[1], "name": row[2], 
-            "sessions": [ row[3], row[4], row[5], row[6], 
+        students.append({"mssv": row[1], "name": row[2],
+            "sessions": [ row[3], row[4], row[5], row[6],
             row[7], row[8], row[9], row[10],
             row[11], row[12], row[13], row[14],
             row[15], row[16], row[17]],
@@ -153,7 +170,9 @@ def getSessions(year,semester,maMH,group):
     session = 0
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("Select Sessions from Class where Year = ? and Semester = ? and MaMH = ? and Nhom = ?", year, semester, maMH, group)
+    sql = "Select Sessions from Class where Year = %s and Semester = %s and MaMH = %s and Nhom = %s"
+    param = (year, semester, maMH, group,)
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
         session = row[0]
     conn.close()
@@ -190,10 +209,12 @@ def loadListClasses(year,semester,user):
     classes = []
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("exec GetListClass ?,?,?", year, semester, user)
+    sql = "call GetListClass(%s,%s,%s)"
+    param = (year, semester, user, )
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
         classes.append({"maMH": row[0], "TenMH": row[1], "Nhom": row[2],
-        "sessions": [ row[3], row[4], row[5], row[6], 
+        "sessions": [ row[3], row[4], row[5], row[6],
             row[7], row[8], row[9], row[10],
             row[11], row[12], row[13], row[14],
             row[15], row[16], row[17]],
@@ -230,7 +251,9 @@ def loadListStudent_Code(code):
 
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("Select StudentID from Attended where ClassID = ?", code)
+    sql = "Select StudentID from Attended where ClassID = %s"
+    param = (code,)
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
         students.append(row[0])
     conn.close()
@@ -240,17 +263,19 @@ def loadListStudent_Code(code):
 @app.route("/diemdanh",methods=["POST"])
 def diemdanh():
     try:
+        realPath = os.path.dirname(__file__)
+
         code = request.form.get("code")
         file = request.form.get("file")
-        
-        urllib.request.urlretrieve(file, "image-camera.jpg")
-        
-        image_camera = cv2.imread('image-camera.jpg')
+
+        urllib.request.urlretrieve(file, os.path.join(realPath,"image-camera.jpg"))
+
+        image_camera = cv2.imread(os.path.join(realPath,'image-camera.jpg'))
 
         students = loadListStudent_Code(code)
 
         # Nhận dạng
-        global modelDetector 
+        global modelDetector
         global modelFacenet
         global modelLabelEncoder
         global modelSVC
@@ -261,7 +286,7 @@ def diemdanh():
         start4 = time.time()
         msg, face_array = detect_face.dectect(modelDetector, img)
         print("---Detect Face: %s seconds ---" % (time.time() - start4))
-        
+
         if msg == '':
             start6 = time.time()
             # Thực hiện chuyển đổi mảng pixel thành mảng các vector
@@ -300,7 +325,7 @@ def diemdanh():
                         "msg": "Không tìm thấy sinh viên trong lớp."
                     }
             # Nếu phần trăm dự đoán thấp hơn thì có thể sinh viên đó không có trong database hoặc hình ảnh từ camera kém
-            elif (class_probability > 45.0):    
+            elif (class_probability > 45.0):
                 result = {
                     "success": False,
                     "msg": "Chất lượng hình ảnh kém hãy thử lại."
@@ -327,9 +352,10 @@ def updateAttened(classID, listStudents):
         date = 'V'
         if (student.get('datesession') != None):
             date = student.get('datesession')
-        sqlUpdate = "UPDATE Attended SET Buoi" + str(student.get('session')) +" = ? Where ClassID = ? and StudentID = ?"
-        cursor.execute(sqlUpdate, date, classID, student.get('mssv'))
-    
+        sqlUpdate = "UPDATE Attended SET Buoi" + str(student.get('session')) +" = %s Where ClassID = %s and StudentID = %s"
+        param = (date, classID, student.get('mssv'),)
+        cursor.execute(sqlUpdate, param)
+
     conn.commit()
     conn.close()
     return
@@ -338,7 +364,9 @@ def getClassInfoByID(classID):
     classInfo = 0
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("Select * from Class where ID = ?", classID)
+    sql = "Select * from Class where ID = %s"
+    param = (classID,)
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
         classInfo = { "Year": row[1], "Semester": row[2], "MaMH": row[3], "TenMH": row[4], "Nhom": row[5], "Session": row[6]}
     conn.close()
@@ -348,10 +376,12 @@ def getListStudentByID(classID):
     listStudents = []
     conn = connection()
     cursor = conn.cursor()
-    cursor.execute("exec GetListStudentsToSendEmail ?", classID)
+    sql = "call GetListStudentsToSendEmail(%s)"
+    param = (classID, )
+    cursor.execute(sql, param)
     for row in cursor.fetchall():
         listStudents.append({"mssv": row[0], "name": row[1], "email": row[2],
-            "sessions": [ row[3], row[4], row[5], row[6], 
+            "sessions": [ row[3], row[4], row[5], row[6],
             row[7], row[8], row[9], row[10],
             row[11], row[12], row[13], row[14],
             row[15], row[16], row[17]],
@@ -365,9 +395,10 @@ def updateStatus(classID, mssv, status, isSendEmail):
     conn = connection()
     cursor = conn.cursor()
 
-    sqlUpdate = "UPDATE Attended SET Status = ?, IsSendEmail = ?  Where ClassID = ? and StudentID = ?"
-    cursor.execute(sqlUpdate, status, isSendEmail, classID, mssv)
-    
+    sqlUpdate = "UPDATE Attended SET Status = %s, IsSendEmail = %s  Where ClassID = %s and StudentID = %s"
+    param = (status, isSendEmail, classID, mssv,)
+    cursor.execute(sqlUpdate, param)
+
     conn.commit()
     conn.close()
 
@@ -388,7 +419,7 @@ Trân trọng,"""
     msg = Message(subject, sender = ('System Attend','SystemAttend@student.tdtu.edu.vn'), recipients = [email])
     msg.body = body
     mail.send(msg)
-    
+
     return
 
 def checkWarning(classID):
@@ -420,7 +451,7 @@ def submitAttended():
         listStudents = request.json.get("listStudents", None)
 
         updateAttened(classID, listStudents)
-        
+
         checkWarning(classID)
 
         result = {
@@ -436,15 +467,15 @@ def CheckExistCourse(year, semester, createBy, data_group):
     conn = connection()
     cursor = conn.cursor()
 
-    sql = 'SELECT COUNT(1) FROM Class WHERE Year = ? and Semester = ? and MaMH = ? and Nhom = ? and CreateBy = ?'
+    sql = 'SELECT COUNT(1) FROM Class WHERE Year = %s and Semester = %s and MaMH = %s and Nhom = %s and CreateBy = %s'
     for k,g in data_group:
-        cursor.execute(sql, year, semester, k[0], k[2],createBy)
+        param = (year, semester, k[0], k[2],createBy,)
+        cursor.execute(sql, param)
         if cursor.fetchone()[0]:
             conn.close()
             return True
-    
-    conn.close()
 
+    conn.close()
     return False
 
 @app.route("/importCourse", methods=["POST"])
@@ -455,7 +486,7 @@ def importCourse():
         file = request.files.get('file')
         createBy = request.form.get('createBy')
         createByName = request.form.get('createByName')
-        
+
         columnName = ['Mã số SV', 'Mã MH', 'Tên MH', 'Nhóm']
 
         if file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
@@ -465,7 +496,7 @@ def importCourse():
 
         data_json_string = data_excel.to_json(orient='records')
         data = json.loads(data_json_string)
-        
+
         #Group By maMH, Nhom
         data_group_check = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
         data_group = groupby(data, lambda item: (item["Mã MH"], item["Tên MH"], item["Nhóm"]))
@@ -483,15 +514,17 @@ def importCourse():
                 # g: list student in class
                 # Create Class
                 sqlInsertClass = 'INSERT INTO Class (Year, Semester, MaMH, TenMH, Nhom, Sessions, CreateBy, CreateByName)' + \
-                                'VALUES(?,?,?,?,?,?,?,?)'
-                cursor.execute(sqlInsertClass, year, semester, k[0], k[1], k[2], 15, createBy, createByName)
-                record_id = cursor.execute('SELECT @@IDENTITY AS id;').fetchone()[0]
-                cursor.commit()
+                                'VALUES(%s,%s,%s,%s,%s,%s,%s,%s)'
+                paramInsertClass = (year, semester, k[0], k[1], k[2], 15, createBy, createByName, )
+                cursor.execute(sqlInsertClass, paramInsertClass)
+                record_id = cursor.lastrowid
+                conn.commit()
                 # Create Student in Class
                 for item in list(g):
-                    sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status, IsSendEmail) VALUES(?,?,?,?)'
-                    cursor.execute(sqlInsertStudentInClass, record_id, item.get('Mã số SV'), 'Active', False)
-                    cursor.commit()
+                    sqlInsertStudentInClass = 'INSERT INTO Attended (ClassID, StudentID, Status, IsSendEmail) VALUES(%s,%s,%s,%s)'
+                    paramInsertStudentInClass = (record_id, item.get('Mã số SV'), 'Active', False,)
+                    cursor.execute(sqlInsertStudentInClass, paramInsertStudentInClass)
+                    conn.commit()
 
             conn.close()
 
@@ -510,13 +543,14 @@ def CheckExistStudents(data):
     conn = connection()
     cursor = conn.cursor()
 
-    sql = 'SELECT COUNT(1) FROM Students WHERE ID = ?'
+    sql = 'SELECT COUNT(1) FROM Students WHERE ID = %s'
     for item in data:
-        cursor.execute(sql, item.get('Mã số SV'))
+        param = (item.get('Mã số SV'),)
+        cursor.execute(sql, param)
         if cursor.fetchone()[0]:
             conn.close()
             return True
-    
+
     conn.close()
 
     return False
@@ -550,12 +584,13 @@ def importStudents():
 
             for row in data:
                 sqlInsertStudents = 'INSERT INTO Students (ID, Name, Sex, Email)' + \
-                                'VALUES(?,?,?,?)'
-                cursor.execute(sqlInsertStudents, row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'))
-                
-            cursor.commit()
+                                'VALUES(%s,%s,%s,%s)'
+                paramInsertStudents = (row.get('Mã số SV'), row.get('Họ lót') + ' ' + row.get('Tên'), row.get('Phái'), row.get('Email'), )
+                cursor.execute(sqlInsertStudents, paramInsertStudents)
+
+            conn.commit()
             conn.close()
-            
+
             result = {
                 "success": True,
                 "msg": "Import Students Success."
@@ -606,7 +641,9 @@ def loadCourseData():
         listCourses = []
         conn = connection()
         cursor = conn.cursor()
-        cursor.execute("Select MaMH, TenMH, Nhom, Sessions from Class where CreateBy = ? and Year = ? and Semester = ?", userID, year, semester)
+        sql = "Select MaMH, TenMH, Nhom, Sessions from Class where CreateBy = %s and Year = %s and Semester = %s"
+        param = (userID, year, semester,)
+        cursor.execute(sql, param)
         for row in cursor.fetchall():
             listCourses.append({"MaMH": row[0], "TenMH": row[1], "Nhom": row[2], "Sessions": row[3]})
         conn.close()
@@ -628,7 +665,7 @@ def retrain():
     # Thực hiện detect ảnh
     realPath = os.path.dirname(__file__)
     source_dir = os.path.join(realPath, 'OriginalFace')
-    dest_dir = os.path.join(realPath, 'DetectFace') 
+    dest_dir = os.path.join(realPath, 'DetectFace')
     detect_face.detectData(modelDetector,source_dir,dest_dir)
 
     # Bắt đầu Embedding dữ liệu ảnh mới
@@ -650,10 +687,11 @@ def retrainModel():
     return result
 
 def load_modelSVC():
+    realPath = os.path.dirname(__file__)
     model = SVC(kernel='linear', probability=True)
-    modelPath = os.path.join(os.path.dirname(__file__),'Model/faces-embeddings.npz')
+    modelPath = os.path.join(realPath,'Model/faces-embeddings.npz')
     if os.path.exists(modelPath):
-        data = load('Model/faces-embeddings.npz')
+        data = load(os.path.join(realPath,'Model/faces-embeddings.npz'))
 
         trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
@@ -662,7 +700,7 @@ def load_modelSVC():
         testX = in_encoder.transform(testX)
 
         global modelLabelEncoder
-    
+
         modelLabelEncoder.fit(trainy)
         trainy = modelLabelEncoder.transform(trainy)
         testy = modelLabelEncoder.transform(testy)
@@ -672,21 +710,26 @@ def load_modelSVC():
     return model
 
 def load_AllModel():
+    realPath = os.path.dirname(__file__)
     mDectector = MTCNN(margin=10, select_largest=False)
     mSVC = load_modelSVC()
-    mFacenet = load_model('facenet_keras.h5')#VGGFace(model='resnet50')#FaceNet()#
+    mFacenet = load_model(os.path.join(realPath,'facenet_keras.h5'))#VGGFace(model='resnet50')#FaceNet()#
     # First using model
-    image_test = cv2.imread('image_loading.jpg')
+
+    image_test = cv2.imread(os.path.join(realPath,'image_loading.jpg'))
+
     msg, face_array = detect_face.dectect(mDectector, image_test)
+
     embedding = training.get_embedding(mFacenet, face_array)
 
     return mDectector, mFacenet, mSVC
 
 @app.route("/reviewModel")
 def reviewModel():
+    realPath = os.path.dirname(__file__)
     result = 'thanh cong'
     global modelSVC
-    data = load('Model/faces-embeddings.npz')
+    data = load(os.path.join(realPath, 'Model/faces-embeddings.npz'))
 
     curtrainX, curtrainy, curtestX, curtesty = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
@@ -695,10 +738,10 @@ def reviewModel():
     testX = in_encoder.transform(curtestX)
 
     global modelLabelEncoder
-    
+
     modelLabelEncoder.fit(curtrainy)
     trainy = modelLabelEncoder.transform(curtrainy)
-    testy = modelLabelEncoder.transform(curtesty) 
+    testy = modelLabelEncoder.transform(curtesty)
 
     # Danh gia
     # predict
@@ -714,9 +757,10 @@ def reviewModel():
 
 @app.route("/randomTest")
 def randomTest():
+    realPath = os.path.dirname(__file__)
     global modelSVC
     # load face embeddings
-    data = load('Model/faces-embeddings.npz')
+    data = load(os.path.join(realPath, 'Model/faces-embeddings.npz'))
     trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
 
     in_encoder = Normalizer(norm='l2')
@@ -728,7 +772,7 @@ def randomTest():
     trainy = out_encoder.transform(trainy)
     testy = out_encoder.transform(testy)
     # test model on a random example from the test dataset
-    
+
     for selection in range(50):
         random_face_emb = testX[selection]
         random_face_class = testy[selection]
@@ -753,8 +797,9 @@ def testEmail():
 
 @app.route("/testRemoveFace")
 def testRemoveFace():
-    
-    data = load('Model/faces-embeddings.npz')
+    realPath = os.path.dirname(__file__)
+
+    data = load(os.path.join(realPath, 'Model/faces-embeddings.npz'))
     trainX, trainy, testX, testy = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
     listRemove = []
     listRemoveTest = []
@@ -763,22 +808,21 @@ def testRemoveFace():
     for index in range(total_range):
         if trainy[index] == '51702014':
             listRemove.append(index)
-    
+
     trainX = np.delete(trainX, listRemove, 0)
     trainy = np.delete(trainy, listRemove, 0)
-    
+
     total_range_test = testy.shape[0]
     for index in range(total_range_test):
         if testy[index] == '51702014':
             listRemoveTest.append(index)
-    
+
     testX = np.delete(testX, listRemoveTest, 0)
     testy = np.delete(testy, listRemoveTest, 0)
 
-    savez_compressed('Model/faces-embeddings.npz', trainX, trainy, testX, testy)
+    savez_compressed(os.path.join(realPath, 'Model/faces-embeddings.npz'), trainX, trainy, testX, testy)
 
     #Remove folder detect
-    realPath = os.path.dirname(__file__)
     dest_dir = os.path.join(realPath, 'DetectFace')
     student_dectect_Dir = os.path.join(dest_dir, '51702014')
     shutil.rmtree(student_dectect_Dir)
@@ -793,7 +837,43 @@ def testRemoveFace():
     result = {"success": True, "msg": "done"}
     return result
 
-if __name__ == "__main__":
+@app.route("/manualload")
+def manualload():
+    global modelLabelEncoder
+    global modelDetector
+    global modelFacenet
+    global modelSVC
+
     modelLabelEncoder = LabelEncoder()
     modelDetector, modelFacenet, modelSVC = load_AllModel()
-    app.run(debug=True)
+
+    result = {"success": True, "msg": "done"}
+    return result
+
+@app.route("/testload")
+def testload():
+    realPath = os.path.dirname(__file__)
+    global modelDetector
+
+    image_test = cv2.imread(os.path.join(realPath,'image_loading.jpg'))
+    msg, face_array = detect_face.dectect(modelDetector, image_test)
+
+    result = {"success": True, "msg": "done"}
+    return result
+
+@app.route("/testdb")
+def testdb():
+    conn = connection()
+    cursor = conn.cursor()
+    conn.close()
+
+    result = {"success": True, "msg": "done"}
+    return result
+
+modelLabelEncoder = None
+modelDetector = None
+modelFacenet = None
+modelSVC = None
+
+if __name__ == "__main__":
+    app.run()
