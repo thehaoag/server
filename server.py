@@ -1,8 +1,8 @@
 from flask import Flask, render_template, Response, request, jsonify
 import cv2
-import pyodbc
+#import pyodbc
 import detect_face
-import imutils
+#import imutils
 import numpy as np
 import training
 from numpy import asarray
@@ -534,8 +534,8 @@ def importCourse():
                 "success": True,
                 "msg": "Import Course Success."
             }
-    except pyodbc.Error as e:
-        result = {"success": False, "msg": "Import Course Failed."}
+    #except pyodbc.Error as e:
+        #result = {"success": False, "msg": "Import Course Failed."}
     except Exception as e:
         result = {"success": False, "msg": str(e)}
 
@@ -597,8 +597,8 @@ def importStudents():
                 "success": True,
                 "msg": "Import Students Success."
             }
-    except pyodbc.Error as e:
-        result = {"success": False, "msg": "Import Students Failed."}
+    #except pyodbc.Error as e:
+        #result = {"success": False, "msg": "Import Students Failed."}
     except Exception as e:
         result = {"success": False, "msg": str(e)}
 
@@ -627,8 +627,8 @@ def importFaces():
             "success": True,
             "msg": "Import Faces Success."
         }
-    except pyodbc.Error as e:
-        result = {"success": False, "msg": "Import Faces Failed."}
+    #except pyodbc.Error as e:
+        #result = {"success": False, "msg": "Import Faces Failed."}
     except Exception as e:
         result = {"success": False, "msg": str(e)}
 
