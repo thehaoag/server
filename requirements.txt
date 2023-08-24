@@ -1,14 +1,14 @@
-pip install flask
-pip install opencv-python
-pip install Pillow
-pip install facenet-pytorch
-pip install scikit-learn
-pip install pandas
-pip install flask-jwt-extended
-pip install keras
-pip install tensorflow
-pip install Flask-Mail
-pip install mysql.connector
-pip install mysql-connector-python
-pip install flask-cors
-pip install openpyxl
+flask
+opencv-python
+Pillow
+facenet-pytorch
+scikit-learn
+pandas
+flask-jwt-extended
+keras
+tensorflow
+Flask-Mail
+mysql.connector
+mysql-connector-python
+flask-cors
+openpyxl
