@@ -55,7 +55,6 @@ jwt = JWTManager(app)
 #@cross_origin()
 def login():
     try:
-        print('Access Login success')
         accounts = []
         user = request.json.get("user", None)
         password = request.json.get("password", None)
@@ -103,7 +102,10 @@ def connection():
     #os.environ["ODBCSYSINI"] = "/home/thehaoag/mysite"
     #conn = pyodbc.connect('DSN=sqlserverdatasource;Uid='+ u +';Pwd=' + p + ';Encrypt=yes;Connection Timeout=30;')
     #conn = pyodbc.connect(cstr)
-    conn = mysql.connector.connect(host="thehaoag.mysql.pythonanywhere-services.com",user="thehaoag",password="dbpassword123",database="thehaoag$DoAn")
+    # Live
+    #conn = mysql.connector.connect(host="thehaoag.mysql.pythonanywhere-services.com",user="thehaoag",password="dbpassword123",database="thehaoag$DoAn")
+    # Local
+    conn = mysql.connector.connect(host="localhost",user="root",password="",database="doan")
     return conn
 
 def loadListStudent_Attend(year,semester,maMH,group,session):
@@ -732,7 +734,7 @@ def reviewModel():
     data = load(os.path.join(realPath, 'Model/faces-embeddings.npz'))
 
     curtrainX, curtrainy, curtestX, curtesty = data['arr_0'], data['arr_1'], data['arr_2'], data['arr_3']
-
+    print('Dataset: train=%d, test=%d' % (curtrainX.shape[0], curtestX.shape[0]))
     in_encoder = Normalizer(norm='l2')
     trainX = in_encoder.transform(curtrainX)
     testX = in_encoder.transform(curtestX)
@@ -865,6 +867,10 @@ def testload():
 def testdb():
     conn = connection()
     cursor = conn.cursor()
+    qid = 1
+    sql = "Select * from Attended where ID = %s"
+    param = (qid,)
+    cursor.execute(sql, param)
     conn.close()
 
     result = {"success": True, "msg": "done"}
@@ -876,4 +882,5 @@ modelFacenet = None
 modelSVC = None
 
 if __name__ == "__main__":
-    app.run()
+    manualload()
+    app.run(debug=True)
